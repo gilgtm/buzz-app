@@ -129,6 +129,8 @@ async function page(type: "stream" | "solo" = "stream") {
     subscribe: () => () => {},
     resolve: () => undefined,
     register() {},
+    requestOpen: () => false,
+    handleOpenRequests: () => () => {},
   };
   render(<ChannelsPage relay={relay} panels={panels} />);
   const user = userEvent.setup();

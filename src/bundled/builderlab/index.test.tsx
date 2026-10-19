@@ -13,6 +13,9 @@ import {
 import userEvent from "@testing-library/user-event";
 import { HostService, type HostResponse } from "../../features/host/service";
 import { SettingsCardsService } from "../../features/settings/service";
+import { PanelsService } from "../../features/panels/service";
+import { BrowserService } from "../../features/browser/service";
+import type { BrowserPlatform } from "../../features/browser/platform";
 import {
   AgentsService,
   type AgentCommunities,
@@ -52,6 +55,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** What the plugin's Apps panel needs: panels, and no native browser. */
+function provideApps(root: Context) {
+  new PanelsService(root);
+  new BrowserService(root, { available: false } as BrowserPlatform);
+}
+
 function provideAgents(
   root: Context,
   community: ReturnType<typeof communityFixture>,
@@ -90,6 +99,7 @@ it.each([undefined, "", "http://builderlab.example"])(
     const root = new Context();
     const runtime = new PluginRuntime(root, async () => builderlab);
     new HostService(root);
+    provideApps(root);
     const cards = new SettingsCardsService(root);
     const community = communityFixture(null);
     const agents = provideAgents(root, community);
@@ -221,6 +231,7 @@ it("shares plugin login with Settings and hosted Agents, replays failed setup wr
   const root = new Context();
   const runtime = new PluginRuntime(root, async () => builderlab);
   new HostService(root);
+  provideApps(root);
   const cards = new SettingsCardsService(root);
   const community = communityFixture();
   const agents = provideAgents(root, community);
