@@ -173,6 +173,7 @@ it("shows exact declared access and changes before an enabled update", async () 
             ],
             processes: [{ id: "worker", program: "example-worker" }],
             mcp: true,
+            files: true,
           },
         },
       },
@@ -231,6 +232,9 @@ it("shows exact declared access and changes before an enabled update", async () 
   expect(screen.getByText(/^Run example-cli/)).toBeVisible();
   expect(screen.getByText(/^Start example-worker/)).toBeVisible();
   expect(screen.getByText(/^Provide tools to local agents/)).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: /^Read your files/ }),
+  ).toBeVisible();
   const computer = screen.getByRole("button", { name: /^Computer access/ });
   expect(computer).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("region", { name: "Plugin safety" })).toBeNull();
@@ -258,6 +262,10 @@ it("shows exact declared access and changes before an enabled update", async () 
     "prominent",
   );
   fireEvent.click(screen.getByRole("button", { name: /^Run example-cli/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Read your files/ }));
+  expect(
+    screen.getByRole("region", { name: "Files details" }),
+  ).toHaveTextContent(/new or changed.*Reads files and resolves folders/);
   fireEvent.click(
     screen.getByRole("button", {
       name: /^Connect to https:\/\/api.example.com/,
