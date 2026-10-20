@@ -110,12 +110,12 @@ test.describe("Berd-style Solo project organization", () => {
     const row = sidebar.locator(`[data-solo-channel-id="${id}"]`);
     await row.click({ button: "right" });
     await page.getByRole("menuitem", { name: "Move to", exact: true }).hover();
-    await page.getByRole("menuitem", { name: "New project…" }).click();
+    await page.getByRole("menuitem", { name: "New workspace…" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByRole("textbox", { name: "Project name" }).fill("Work");
+    await dialog.getByRole("textbox", { name: "Workspace name" }).fill("Work");
     await dialog.getByRole("button", { name: "Create and move" }).click();
     await expect(dialog).not.toBeVisible();
-    await expect(sidebar.getByText("Saving project…")).not.toBeVisible();
+    await expect(sidebar.getByText("Saving workspace…")).not.toBeVisible();
     await expect(sidebar.getByRole("alert")).toHaveCount(0);
     const project = sidebar.getByRole("button", { name: "Work", exact: true });
     await expect(project).toBeVisible();
@@ -126,6 +126,33 @@ test.describe("Berd-style Solo project organization", () => {
     await page.clock.install();
     await page.clock.runFor(1_100);
     await page.clock.resume();
+
+    await newChat(page);
+    for (const [before, choice, after] of [
+      ["Add workspace", "Work", "Workspace: Work"],
+      ["Workspace: Work", "No workspace", "Add workspace"],
+    ]) {
+      const trigger = page.getByRole("button", { name: before, exact: true });
+      await trigger.focus();
+      await trigger.press("Enter");
+      const popup = page.getByRole("menu").filter({
+        has: page.getByRole("menuitemradio", {
+          name: "No workspace",
+          exact: true,
+        }),
+      });
+      const option = popup.getByRole("menuitemradio", {
+        name: choice,
+        exact: true,
+      });
+      await option.focus();
+      await option.press("Enter");
+      // Wait for popup teardown, when Base UI restores focus to the trigger.
+      await expect(popup).toHaveCount(0);
+      await expect
+        .soft(page.getByRole("button", { name: after, exact: true }))
+        .toBeFocused();
+    }
 
     const beta = sidebar.getByRole("button", { name: "Beta", exact: true });
     await beta.click({ button: "right" });
@@ -146,7 +173,7 @@ test.describe("Berd-style Solo project organization", () => {
 
     await sidebar.getByText("Alpha", { exact: true }).click();
     await expect(
-      page.getByRole("button", { name: "Project: Work", exact: true }),
+      page.getByRole("button", { name: "Workspace: Work", exact: true }),
     ).toBeVisible();
     app.soloAgentMessage(id, "Agent follow-up fixture");
     const [agent] = app.soloAgents;
@@ -247,9 +274,9 @@ test("dragging a chat between a project and Chats saves and reloads like Move to
   await page.clock.install();
   await chat("Alpha").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Move to", exact: true }).hover();
-  await page.getByRole("menuitem", { name: "New project…" }).click();
+  await page.getByRole("menuitem", { name: "New workspace…" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("textbox", { name: "Project name" }).fill("Work");
+  await dialog.getByRole("textbox", { name: "Workspace name" }).fill("Work");
   await dialog.getByRole("button", { name: "Create and move" }).click();
   await expect(inProject("Alpha")).toBeVisible();
   const work = (await published(1))[id];
@@ -375,7 +402,15 @@ test("Share grants access and posts a link without promoting or moving the Solo 
   await page.getByRole("menuitem", { name: "Share…", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Share chat" });
   const search = dialog.getByRole("combobox", { name: "People or channel" });
+  // Text entry starts after the menu-to-dialog transition and focus handoff.
+  await dialog.evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations().map((animation) => animation.finished),
+    );
+  });
+  await expect(search).toBeFocused();
   await search.fill("Aria");
+  await expect(search).toHaveValue("Aria");
   await page.getByRole("option", { name: /Aria/ }).click();
   await search.fill("Team");
   await page.getByRole("option", { name: "Team", exact: true }).click();

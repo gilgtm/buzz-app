@@ -1,4 +1,5 @@
 import { assert, describe, expect, it, vi } from "vitest";
+import { ReadError } from "./errors";
 import { createRelaySession } from "./session";
 import type { HeadPersistence } from "./persistence";
 import {
@@ -303,59 +304,6 @@ describe("channel store", () => {
       hasMore: true,
     });
   });
-});
-
-it("opens an ordinary private Solo chat with existing agent replies in its main timeline", async () => {
-  const { store, queries, next } = setup();
-  queries.ensureList();
-  next().respond([
-    roster(relay, "work", [viewer.pubkey]),
-    signed(relay, {
-      kind: 39000,
-      content: "",
-      tags: [
-        ["d", "work"],
-        ["name", "Work"],
-        ["t", "stream"],
-        ["private"],
-        ["t", "buzz.solo"],
-      ],
-    }),
-    profile(alice, { name: "Alice" }),
-    profile(viewer, { name: "Viewer" }),
-  ]);
-  await flush();
-  queries.ensure("work");
-  const request = next();
-  expect(request.filters[0]).not.toHaveProperty("top_level");
-  expect(request.filters[0]).not.toHaveProperty("session_timeline");
-  const root = message(viewer, "work", "Prompt", 20);
-  const reply = message(alice, "work", "Answer", 21, [
-    ["e", root.id, "", "reply"],
-  ]);
-  request.respond([reply, root]);
-  await flush();
-  expect(queries.window("work").rows).toEqual([]);
-  next().respond([]); // Fetch message overlays before presenting the page.
-  await flush();
-  expect(queries.window("work").rows.map((row) => row.content)).toEqual([
-    "Prompt",
-    "Answer",
-  ]);
-  expect(queries.window("work").hasMore).toBe(true);
-  next().respond([]); // Optional profile enrichment is independent of history.
-  await flush();
-  queries.loadOlder("work");
-  const older = next();
-  expect(older.filters[0]).toMatchObject({ until: 20, before_id: root.id });
-  older.respond([]);
-  await flush();
-  expect(queries.window("work").hasMore).toBe(false);
-  expect(queries.window("work").rows.map((row) => row.content)).toEqual([
-    "Prompt",
-    "Answer",
-  ]);
-  store.dispose();
 });
 
 it("projects explicit visibility and replaces description-only changes", async () => {
@@ -722,5 +670,105 @@ it("does not commit a roster read that lands after the list stopped being ready"
     });
   } finally {
     test.store.dispose();
+  }
+});
+
+it.each([
+  [48100, 48103],
+  [48103, 48100],
+])(
+  "keeps one Huddle card when live events arrive as %s then %s",
+  async (first, second) => {
+    let receive!: (events: readonly import("./events").RelayEvent[]) => void;
+    const owner = createRelaySession({
+      ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
+      async query(filters) {
+        if (filters.some((filter) => filter.top_level))
+          return [
+            bounds(relay, "parent", "head", {
+              has_more: false,
+              next_cursor: null,
+            }),
+          ];
+        return [
+          roster(relay, "parent", [viewer.pubkey]),
+          metadata(relay, "parent", "Parent"),
+        ].filter((event) =>
+          filters.some((filter) => filter.kinds?.includes(event.kind)),
+        );
+      },
+      subscribe(callbacks) {
+        receive = callbacks.receive;
+        return { update() {}, retry() {}, dispose() {} };
+      },
+    });
+    try {
+      const channels = owner.session.channels;
+      channels.ensureList();
+      await vi.waitFor(() => expect(channels.list().status).toBe("ready"));
+      channels.ensure("parent");
+      await vi.waitFor(() =>
+        expect(channels.window("parent").status).toBe("ready"),
+      );
+      let startId: string | undefined;
+      for (const kind of [first, second]) {
+        const event = signed(relay, {
+          kind,
+          tags: [["h", "parent"]],
+          content: JSON.stringify({
+            ephemeral_channel_id: "00000000-0000-4000-8000-000000000002",
+          }),
+        });
+        if (kind === 48100) startId = event.id;
+        receive([event]);
+        expect(channels.window("parent").rows).toEqual([
+          expect.objectContaining({
+            id: startId ?? event.id,
+            huddle: expect.objectContaining({
+              state: startId ? "started" : "ended",
+            }),
+          }),
+        ]);
+      }
+    } finally {
+      owner.dispose();
+    }
+  },
+);
+
+it("settles a metadata retry during quota cooldown without issuing another read", async () => {
+  const { store, queries, next, pending } = setup();
+  const clock = vi.spyOn(performance, "now").mockReturnValue(1000);
+  try {
+    queries.ensureList();
+    next().respond([roster(relay, "a", [viewer.pubkey])]);
+    await flush();
+    next().fail(new ReadError("unavailable", "Quota", 429, 5000));
+    await flush();
+    const failed = queries.list();
+    expect(failed.status).toBe("error");
+    expect(failed.channels[0]?.metadataPending).toBe(true);
+    const settled = vi.fn();
+    const stop = queries.subscribeList(settled);
+    queries.ensureList();
+    await flush();
+    expect(pending).toHaveLength(0);
+    expect(settled).toHaveBeenCalledOnce();
+    expect(queries.list()).not.toBe(failed);
+    expect(queries.list()).toEqual(failed);
+    stop();
+    clock.mockReturnValue(6001);
+    queries.ensureList();
+    next().respond([roster(relay, "a", [viewer.pubkey])]);
+    await flush();
+    next().respond([metadata(relay, "a", "Alpha")]);
+    await flush();
+    expect(queries.list()).toMatchObject({
+      status: "ready",
+      channels: [{ name: "Alpha", metadataPending: undefined }],
+    });
+  } finally {
+    store.dispose();
+    clock.mockRestore();
   }
 });

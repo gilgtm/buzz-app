@@ -6,6 +6,7 @@ import { useConversationTabs } from "./useConversationTabs";
 import tabStyles from "./ChannelTabs.module.css";
 import panelStyles from "../../features/panels/Panels.module.css";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
+import { useToastNotification } from "../../shared/design-system/ui/Toast";
 import { useReturnHighlight } from "../../features/messages/use-return-highlight";
 import { ChannelBody } from "./ChannelBody";
 import { tabPane, useChannelTabState } from "./useChannelTabState";
@@ -17,7 +18,7 @@ import {
   soloDraftTarget,
 } from "../../features/channel-navigation/routes";
 import { ownSolo } from "../../features/solo/labels";
-import { ProjectControl } from "../../features/solo/ProjectControl";
+import { WorkspaceControl } from "../../features/solo/WorkspaceControl";
 import type { ChannelLifecycleAction } from "../../features/relay/channel-lifecycle-protocol";
 import { SoloHeading } from "./SoloHeading";
 import { ChannelCanvasDialog } from "./ChannelCanvasDialog";
@@ -37,7 +38,6 @@ import {
   isBuzzLink,
   parseBuzzLink,
 } from "../../features/navigation/buzz-links";
-import { SoloMessageTarget } from "../../features/solo/SoloMessageTarget";
 import { useChatConversions } from "../../features/solo/conversion";
 import { ConvertToChannel } from "../../features/solo/ConvertToChannel";
 import { UnreadOptions } from "./UnreadBadge";
@@ -199,6 +199,7 @@ function ChannelWorkspace({
     [draftTarget],
   );
   const list = useChannelList(queries.channels);
+  const initialList = useRef(list);
   const preferences = useSidebarPreferences(queries.sidebarPreferences);
   useEffect(() => {
     // Initial channel discovery cancels in-flight reads as it settles access.
@@ -260,6 +261,18 @@ function ChannelWorkspace({
     },
     [navigator, viewer, scope],
   );
+  // A send or open that finishes behind the Settings modal must not navigate
+  // away from Settings, which would discard its unsaved edits.
+  const behindSettings = () =>
+    navigator?.snapshot().entry.target.kind === "settings";
+  // A Solo start that finishes behind Settings stays put; a fresh draft
+  // replaces the submitted one so its prompt cannot be started again. The
+  // replacement never claims focus for the visit's original request, which
+  // would pull typing out of the modal into the hidden composer.
+  const [retiredSoloDraft, setRetiredSoloDraft] = useState<{
+    generation: number;
+    signal: AbortSignal | undefined;
+  }>({ generation: 0, signal: undefined });
   const select = useCallback(
     (id: string) => {
       navigate(id);
@@ -269,9 +282,16 @@ function ChannelWorkspace({
   const threadTrigger = useRef<HTMLElement | null>(null);
   const [sent, setSent] = useState<{ channelId: string; id: string }>();
   const { channels, profiles } = useChannelLabels(
-    list.channels,
+    list.channels.filter(
+      (channel) =>
+        // Wait for metadata so temporary rooms never flash as unnamed channels.
+        !channel.huddle && !channel.metadataPending,
+    ),
     queries.profiles,
     queries.names,
+  );
+  const metadataPending = list.channels.some(
+    (channel) => channel.metadataPending,
   );
   const requestedChannel =
     navigation?.target.kind === "conversation"
@@ -323,7 +343,7 @@ function ChannelWorkspace({
     queries,
     list.status,
   ]);
-  const resolving =
+  const resolvingMembership =
     !!requestedChannel &&
     !joinedRequest &&
     !!queries.channels.resolve &&
@@ -347,7 +367,7 @@ function ChannelWorkspace({
     !!draft ||
     (navigation?.target.kind === "page" &&
       navigation.target.route?.params === "empty");
-  const current = emptyDestination
+  const requestedDestination = emptyDestination
     ? undefined
     : requestedChannel
       ? (channels.find((channel) => channel.id === requestedChannel) ??
@@ -361,6 +381,14 @@ function ChannelWorkspace({
           : undefined) ??
         channels.find((channel) => channel.id === selected) ??
         channels.find((item) => item.channelType !== "solo"));
+  // Exact links and saved selections must respect the same Huddle-only entry point.
+  const resolving =
+    resolvingMembership ||
+    (list.status !== "error" && !!requestedDestination?.metadataPending);
+  const current =
+    requestedDestination?.huddle || requestedDestination?.metadataPending
+      ? undefined
+      : requestedDestination;
   useLayoutEffect(() => {
     visiblePreview.current =
       current?.readOnly && !current.cached && !cached
@@ -391,13 +419,23 @@ function ChannelWorkspace({
     }
     if (
       !cached &&
-      requestedChannel &&
       !resolving &&
-      list.status === "ready" &&
-      !current
+      !current &&
+      ((requestedChannel && list.status === "ready") ||
+        (list.status === "error" &&
+          // ensureList retries on mount, possibly after asynchronous cache restore.
+          // Do not settle a new navigation using the previous attempt's error.
+          list !== initialList.current &&
+          metadataPending &&
+          !emptyDestination))
     )
       navigation?.complete({ status: "failed", reason: "unavailable" });
-    if (!requestedChannel && !current && list.status === "ready")
+    if (
+      !requestedChannel &&
+      !current &&
+      list.status === "ready" &&
+      (!metadataPending || emptyDestination)
+    )
       navigation?.complete({ status: "opened" });
     if (!requestedChannel && current && navigation && viewer) {
       // Resolve the saved default within this attempt, keeping its caller and deadline.
@@ -414,11 +452,13 @@ function ChannelWorkspace({
   }, [
     cached,
     composingMessage,
+    metadataPending,
+    emptyDestination,
     draft,
     requestedChannel,
     resolving,
     current,
-    list.status,
+    list,
     navigation,
     viewer,
     scope,
@@ -541,9 +581,11 @@ function ChannelWorkspace({
     setSettings(undefined);
     afterClose("settings");
   };
-  // The Solo treatment: a flat agent conversation. In the owner's own chat it
+  // The Solo treatment: an agent conversation. In the owner's own chat it
   // also files into a project; the conversation scope owns composer policy.
   const solo = current?.channelType === "solo";
+  // Solo has no main tab workspace; its threads open beside the chat.
+  const threadPane = solo ? ("side" as const) : undefined;
   const personal = ownSolo(current, queries.viewer);
   // Confirmations belong to this visit; a Solo conversation that leaves the
   // owner's view returns them to a new draft rather than an empty page.
@@ -564,6 +606,19 @@ function ChannelWorkspace({
       },
     });
   };
+  // A Solo start that fails leaves its chat for New chat only while this
+  // workspace still shows that chat.
+  const showing = useRef(requestedChannel);
+  const notify = useToastNotification();
+  useLayoutEffect(() => {
+    showing.current = requestedChannel;
+  });
+  useLayoutEffect(
+    () => () => {
+      showing.current = undefined;
+    },
+    [],
+  );
   const chooseLatest = useRef(chooseLifecycle);
   useLayoutEffect(() => {
     chooseLatest.current = chooseLifecycle;
@@ -609,12 +664,7 @@ function ChannelWorkspace({
       if (archive.current === shortcut) archive.current = undefined;
     };
   }, [archive, archivableId, lifecycle, navigation]);
-  const onComposerSend = useComposerSent(
-    currentId,
-    solo && !!requestedMessage,
-    setSent,
-    select,
-  );
+  const onComposerSend = useComposerSent(currentId, setSent);
   const [exactOpening, setExactOpening] = useState<{
     request: PageNavigation;
     inTimeline: boolean;
@@ -625,7 +675,7 @@ function ChannelWorkspace({
       current?.cached ||
       !navigation ||
       !requestedMessage ||
-      (!solo && requestedThread === requestedMessage) ||
+      requestedThread === requestedMessage ||
       !currentId ||
       navigation.signal.aborted
     )
@@ -641,11 +691,11 @@ function ChannelWorkspace({
       setExactOpening({
         request: navigation,
         inTimeline:
-          (solo || requestedThread !== requestedMessage) &&
+          requestedThread !== requestedMessage &&
           window.status === "ready" &&
           window.freshness !== "cached" &&
           window.rows.some(
-            (row) => row.id === requestedMessage && (solo || !row.threadRootId),
+            (row) => row.id === requestedMessage && !row.threadRootId,
           ),
       });
     };
@@ -660,17 +710,13 @@ function ChannelWorkspace({
     requestedThread,
     currentId,
     queries,
-    solo,
   ]);
   // A live connection can still be confirming its restored membership. Keep
   // the pending intent; an exact reader cannot use display-only authority.
   const exact =
     cached || current?.cached
       ? undefined
-      : !solo &&
-          navigation &&
-          requestedMessage &&
-          requestedThread === requestedMessage
+      : navigation && requestedMessage && requestedThread === requestedMessage
         ? { request: navigation, inTimeline: false }
         : exactOpening?.request === navigation
           ? exactOpening
@@ -680,7 +726,6 @@ function ChannelWorkspace({
   const routedThread = useMemo(
     () =>
       !cached &&
-      !solo &&
       current &&
       navigation &&
       requestedMessage &&
@@ -690,17 +735,18 @@ function ChannelWorkspace({
             channelId: current.id,
             messageId: requestedMessage,
             rootId: requestedThread ?? requestedMessage,
+            pane: threadPane,
             navigation,
           }
         : undefined,
     [
       cached,
-      solo,
       current,
       navigation,
       requestedMessage,
       requestedThread,
       exact,
+      threadPane,
     ],
   );
   const conversationIcon = (item: (typeof channels)[number]) => {
@@ -730,7 +776,8 @@ function ChannelWorkspace({
     extensions,
     leadingIds: settings ? ["settings"] : [],
     threadId: routedThread?.messageId,
-    mainPane: true,
+    mainPane: !solo,
+    navigation: navigator,
     routed: routedThread,
     onCloseThread: (tab, active, last) => {
       // Closing the addressed thread returns the route to its channel, so a
@@ -768,6 +815,7 @@ function ChannelWorkspace({
     openLink: (url) => openLink(url, { fromThread: true }),
     // A Solo conversation has no channel menu; its history takes focus instead.
     fallbackFocus: solo ? historyContainer : settingsTrigger,
+    openMembers: () => setMembersOpen(true),
     eligible: (entry) =>
       !entry.panel.channelMenu ||
       !!(
@@ -986,7 +1034,13 @@ function ChannelWorkspace({
       open(undefined);
       // Every opening keeps existing work: a new thread adds a tab and an
       // open one is selected wherever it was placed.
-      tabState.openThreadTab(currentId, messageId, threadRootId, intent);
+      tabState.openThreadTab(
+        currentId,
+        messageId,
+        threadRootId,
+        intent,
+        threadPane,
+      );
       const target = navigator?.snapshot().entry.target;
       if (
         navigator &&
@@ -1017,6 +1071,7 @@ function ChannelWorkspace({
       scope,
       open,
       setSettings,
+      threadPane,
       tabState.openThreadTab,
       tabState.leaveVisit,
     ],
@@ -1314,28 +1369,7 @@ function ChannelWorkspace({
         ref={historyContainer}
         className={`relative flex min-h-0 flex-col${current ? " flex-1" : ""}`}
       >
-        {solo &&
-        current &&
-        navigation &&
-        requestedMessage &&
-        exact &&
-        !exact.inTimeline ? (
-          <SoloMessageTarget
-            key={`${current.id}:${requestedMessage}`}
-            session={queries}
-            scope={scope}
-            channelId={current.id}
-            messageId={requestedMessage}
-            navigation={navigation}
-            extensions={extensions}
-            onOpenLink={openLink}
-            canOpenLink={canOpenLink}
-            onLatest={() => select(current.id)}
-            onRetry={() => {
-              void navigator?.retry();
-            }}
-          />
-        ) : current ? (
+        {current ? (
           <ChannelBody
             onContentReady={setContentReadyChannel}
             viewer={viewer}
@@ -1344,11 +1378,9 @@ function ChannelWorkspace({
             // The composer below mounts TypingIndicator for members of a live channel.
             activityLane={!current.readOnly && !current.cached}
             navigation={
-              solo || !requestedMessage || exact?.inTimeline
-                ? navigation
-                : undefined
+              !requestedMessage || exact?.inTimeline ? navigation : undefined
             }
-            onOpenThread={solo ? undefined : openThread}
+            onOpenThread={openThread}
             revealMessageId={
               sent?.channelId === current.id ? sent.id : undefined
             }
@@ -1428,7 +1460,7 @@ function ChannelWorkspace({
           }
           trailingTool={
             personal ? (
-              <ProjectControl
+              <WorkspaceControl
                 session={queries}
                 channelId={current.id}
                 disabled={!!current.archived}
@@ -1504,26 +1536,52 @@ function ChannelWorkspace({
               onPreparing={(pubkeys) => handoff?.prepareDm(pubkeys)}
               onOpened={(channelId) => {
                 handoff?.clearPreparingDm();
-                select(channelId);
+                if (!behindSettings()) select(channelId);
               }}
               onStarted={(channelId, id) => {
                 handoff?.clearPreparingDm();
+                if (behindSettings()) return;
                 setSent({ channelId, id });
                 select(channelId);
               }}
             />
           ) : draft ? (
             <SoloDraft
-              key={JSON.stringify([draft.project, draft.agent])}
+              key={JSON.stringify([
+                draft.project,
+                draft.agent,
+                retiredSoloDraft.generation,
+              ])}
               focusRequest={
-                navigation?.focus === "preserve" ? 0 : (navigation?.signal ?? 0)
+                navigation?.focus === "preserve" ||
+                (retiredSoloDraft.generation > 0 &&
+                  retiredSoloDraft.signal === navigation?.signal)
+                  ? 0
+                  : (navigation?.signal ?? 0)
               }
               agent={draft.agent}
               projectId={draft.project}
               session={queries}
               scope={scope}
               extensions={extensions}
-              onStarted={select}
+              onStarted={(channelId) => {
+                if (!behindSettings()) select(channelId);
+                else
+                  setRetiredSoloDraft(({ generation }) => ({
+                    generation: generation + 1,
+                    signal: navigation?.signal,
+                  }));
+              }}
+              onFailed={(channelId, message) => {
+                notify(message, "error");
+                // A failure behind Settings must not navigate away from it.
+                if (
+                  showing.current === channelId &&
+                  navigator &&
+                  !behindSettings()
+                )
+                  void navigator.open(soloDraftTarget(scope, draft));
+              }}
             />
           ) : (
             <>

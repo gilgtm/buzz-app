@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -14,6 +15,7 @@ import { createRelaySession } from "../../features/relay/session";
 import { keypair, signed } from "../../features/relay/testing";
 import type { RelayData } from "../../features/relay/service";
 import type { ChannelSummary } from "../../features/relay/contracts";
+import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import type { PageNavigation } from "../../features/navigation/service";
 import type { Navigation } from "../../features/navigation/controller";
 import type { OpenTarget } from "../../features/navigation/targets";
@@ -25,7 +27,7 @@ import {
 } from "../../features/channel-navigation/routes";
 import { writeView } from "../../shared/view-state";
 import { ChannelsPage, type ArchiveShortcut } from "./ChannelsPage";
-import { SoloProjects } from "./SoloProjects";
+import { SoloWorkspaces } from "./SoloWorkspaces";
 import type { RelaySession } from "../../features/relay/session";
 
 composerDOMFixture();
@@ -45,11 +47,14 @@ function fixture({
   placed = true,
   type = "solo",
   target,
+  behindSettings = false,
 }: {
   /** Whether the viewer created the chat, rather than joining it as a guest. */
   placed?: boolean;
   type?: "solo" | "stream";
   target?: (scope: string) => OpenTarget;
+  /** Settings is open over this retained page. */
+  behindSettings?: boolean;
 } = {}) {
   vi.stubGlobal(
     "ResizeObserver",
@@ -192,6 +197,24 @@ function fixture({
     messages: { ...owner.session.messages, send },
     channelWrites: {
       ...owner.session.channelWrites,
+      available: true,
+      // A new chat joins the owner's list once its creation is requested.
+      create: vi.fn((chat: string) => {
+        list = {
+          ...list,
+          channels: [...list.channels, { ...channel, id: chat, name: "" }],
+        };
+        emitList();
+        return "c".repeat(64);
+      }),
+      // Starts through the create above; the relay accepts it at once.
+      start: vi.fn((chat: string) => ({
+        create: session.channelWrites.create(chat),
+        ready: Promise.resolve(),
+      })),
+      delivered: vi.fn(async () => {}),
+      refresh: vi.fn(async () => {}),
+      addAgents: vi.fn(async () => {}),
       refreshMembership: vi.fn(async () => channel),
     },
   };
@@ -224,7 +247,12 @@ function fixture({
     open,
     retry() {},
     snapshot: () => ({
-      entry: { id: navigation.entryId, target: navigation.target },
+      entry: {
+        id: navigation.entryId,
+        target: behindSettings
+          ? { version: 1, kind: "settings", scope: null }
+          : navigation.target,
+      },
       attempt: { signal: abort.signal },
     }),
   } as unknown as Navigation;
@@ -232,7 +260,7 @@ function fixture({
   const page = (sidebar = false) => (
     <ChannelNavigationProvider relay={relay}>
       {sidebar && (
-        <SoloProjects
+        <SoloWorkspaces
           session={session as unknown as RelaySession}
           navigator={navigator}
           scope={scope}
@@ -259,6 +287,7 @@ function fixture({
   return {
     mount: () => render(page()),
     mountWithSidebar: () => render(page(true)),
+    mountWithToasts: () => render(<ToastProvider>{page()}</ToastProvider>),
     abort,
     archive,
     open,
@@ -407,7 +436,7 @@ it("starts a Solo draft route in its project, with that project's saved draft", 
   ).toHaveTextContent("Plan the week");
   await waitFor(() =>
     expect(
-      within(region).getByRole("button", { name: "Project: Work" }),
+      within(region).getByRole("button", { name: "Workspace: Work" }),
     ).toBeEnabled(),
   );
 });
@@ -425,8 +454,46 @@ it("tags a Solo draft route's agent in the new chat", async () => {
     within(region).getByRole("textbox", { name: "Message your agents" }),
   ).not.toHaveTextContent("@Helper");
   expect(
-    within(region).getByRole("button", { name: "Add project" }),
+    within(region).getByRole("button", { name: "Add workspace" }),
   ).toBeVisible();
+});
+
+it("a new Solo chat finishing behind Settings stays put and retires its draft", async () => {
+  const f = fixture({ behindSettings: true, target: soloDraftTarget });
+  writeView(f.scope, "solo:new-draft", {
+    text: "@Scout Started behind Settings",
+    recipients: [{ pubkey: agent, name: "Scout", start: 0, end: 6 }],
+  });
+  f.mount();
+  // Stands in for a field in the Settings modal that owns focus.
+  const settingsField = document.createElement("input");
+  document.body.append(settingsField);
+  const region = await screen.findByRole("region", { name: "New chat" });
+  try {
+    // The start runs while Settings owns focus.
+    settingsField.focus();
+    fireEvent.click(
+      within(region).getByRole("button", { name: "Send message" }),
+    );
+    await waitFor(() =>
+      expect(f.session.channelWrites.create).toHaveBeenCalledOnce(),
+    );
+    expect(f.open).not.toHaveBeenCalled();
+    // A fresh draft replaces the submitted one, so it cannot start again.
+    const composer = () =>
+      within(screen.getByRole("region", { name: "New chat" })).getByRole(
+        "textbox",
+        { name: "Message your agents" },
+      );
+    await waitFor(() =>
+      expect(composer()).not.toHaveTextContent("Started behind Settings"),
+    );
+    // The replacement never pulls focus out of Settings.
+    expect(settingsField).toHaveFocus();
+    expect(f.open).not.toHaveBeenCalled();
+  } finally {
+    settingsField.remove();
+  }
 });
 
 it("gives the owner's Solo chat its tag requirement and project", async () => {
@@ -436,7 +503,7 @@ it("gives the owner's Solo chat its tag requirement and project", async () => {
     name: "Message your agents",
   });
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Add project" })).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "Add workspace" })).toBeEnabled(),
   );
   const user = userEvent.setup();
   await user.click(input);
@@ -455,7 +522,7 @@ it("uses the ordinary composer for a guest in a shared Solo chat", async () => {
   const input = await screen.findByRole("textbox", {
     name: "Message your agents",
   });
-  expect(screen.queryByRole("button", { name: "Add project" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Add workspace" })).toBeNull();
   const user = userEvent.setup();
   await user.click(input);
   await user.keyboard("Hello team{Enter}");
@@ -527,6 +594,113 @@ it.each([
     else expect(f.open).not.toHaveBeenCalled();
   },
 );
+
+it("offers the same chat actions from the header and the sidebar row", async () => {
+  const f = fixture();
+  f.mountWithSidebar();
+  const user = userEvent.setup();
+  const items = async (trigger: string) => {
+    await user.click(await screen.findByRole("button", { name: trigger }));
+    const menu = await screen.findByRole("menu", { name: trigger });
+    await within(menu).findByRole("menuitem", { name: "Delete chat" });
+    const names = within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    return names;
+  };
+  const header = await items("Chat actions");
+  expect(header).toEqual([
+    "Share…",
+    "Convert to channel",
+    "Move to",
+    "Copy",
+    "Chat settings…",
+    "Archive chat",
+    "Delete chat",
+  ]);
+  expect(await items("Actions for Planning")).toEqual(header);
+});
+
+it("runs the header's own chat actions and returns focus to Chat actions", async () => {
+  const f = fixture();
+  const assign = vi.fn(async () => {});
+  Object.assign(f.session.soloPreferences, { writable: true, assign });
+  f.mount();
+  const user = userEvent.setup();
+  const trigger = await screen.findByRole("button", { name: "Chat actions" });
+  await user.click(trigger);
+  (await screen.findByRole("menuitem", { name: "Move to" })).focus();
+  await user.keyboard("{ArrowRight}");
+  await user.click(await screen.findByRole("menuitem", { name: "Work" }));
+  expect(assign).toHaveBeenCalledExactlyOnceWith(id, "work");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  await user.click(trigger);
+  await user.click(
+    await screen.findByRole("menuitem", { name: "Chat settings…" }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: "Chat settings" });
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await waitFor(() => expect(trigger).toHaveFocus());
+});
+
+it("reports a failed header move beside the header and retries it", async () => {
+  const f = fixture();
+  const base = f.session.soloPreferences.snapshot();
+  let current: ReturnType<typeof f.session.soloPreferences.snapshot> = base;
+  const listeners = new Set<() => void>();
+  const publish = (next: typeof current) => {
+    current = next;
+    for (const listener of listeners) listener();
+  };
+  const failed = {
+    ...base,
+    moves: [
+      {
+        id: 1,
+        channelId: id,
+        destination: { section: "work" },
+        pending: false,
+        error: "Relay unavailable",
+      },
+    ],
+  } as unknown as typeof current;
+  const retryMove = vi.fn(async () => {});
+  Object.assign(f.session.soloPreferences, {
+    writable: true,
+    snapshot: () => current,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    assign: vi.fn(async () => {
+      publish(failed);
+      throw new Error("Relay unavailable");
+    }),
+    retryMove,
+    dismissMoveError: () => publish(base),
+  });
+  f.mountWithToasts();
+  const user = userEvent.setup();
+  // No failure is shown for a move this header did not start.
+  act(() => publish(failed));
+  expect(screen.queryByText("Chat wasn’t moved")).toBeNull();
+  act(() => publish(base));
+  await user.click(await screen.findByRole("button", { name: "Chat actions" }));
+  (await screen.findByRole("menuitem", { name: "Move to" })).focus();
+  await user.keyboard("{ArrowRight}");
+  await user.click(await screen.findByRole("menuitem", { name: "Work" }));
+  expect(await screen.findByText("Chat wasn’t moved")).toBeVisible();
+  // Toasts own swipe gestures, so press their buttons without a pointer.
+  fireEvent.click(screen.getByRole("button", { name: "Retry move" }));
+  expect(retryMove).toHaveBeenCalledExactlyOnceWith(id);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss notification" }));
+  await waitFor(() =>
+    expect(screen.queryByText("Chat wasn’t moved")).toBeNull(),
+  );
+});
 
 it("returns focus to Chat actions when its confirmation is cancelled", async () => {
   const f = fixture();

@@ -1,4 +1,5 @@
-import { openPage } from "./navigation.mjs";
+import { pluginAction } from "./plugin-settings.mjs";
+import { closeSettings, openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 const button = (page, name) => page.getByRole("button", { name, exact: true });
@@ -36,11 +37,12 @@ test("web hides the unusable terminal and does not consume its shortcut, includi
   await expect(launcher).toHaveCount(0);
   await page.keyboard.press(`${modifier}+,`);
   await button(page, "Manage plugins").click();
-  const toggle = page.getByRole("switch", { name: "Enable Terminal" });
+  const toggle = pluginAction(page, "Terminal");
   await toggle.click();
-  await expect(toggle).not.toBeChecked();
+  await expect(toggle).toHaveAccessibleName(/^Enable /);
   await toggle.click();
-  await expect(toggle).toBeChecked();
+  await expect(toggle).toHaveAccessibleName(/^Disable /);
+  await closeSettings(page);
   await openPage(page, "Messages");
   await expect(launcher).toHaveCount(0);
   await page.keyboard.press(`${modifier}+j`);

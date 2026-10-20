@@ -31,10 +31,12 @@ import { ConversationTab } from "./ConversationTab";
 import { TabSlot, useTabNodes } from "./TabHosts";
 import { createPortal, flushSync } from "react-dom";
 import type { PageNavigation } from "../../features/navigation/service";
+import type { Navigation } from "../../features/navigation/controller";
 import { useChannelPanels } from "./useChannelPanels";
 import {
   entryPane,
   panelTabId,
+  rootOfTab,
   selectedTabId,
   tabPane,
   type ConversationTab as Tab,
@@ -64,9 +66,12 @@ export function useConversationTabs({
   eligible,
   threadId,
   onOpenDrawer,
+  openMembers,
   mainPane = false,
   anyMainThread = false,
   threadPane,
+  visits = true,
+  navigation,
   routed,
   onCloseThread,
   onRetryNavigation,
@@ -89,12 +94,17 @@ export function useConversationTabs({
   eligible?(entry: PanelOpening): boolean;
   threadId?: string | undefined;
   onOpenDrawer?(): void;
+  openMembers?(): void;
   /** This page hosts thread tabs in its main pane too. */
   mainPane?: boolean | undefined;
   /** Any thread may use the main pane, not only the current conversation's. */
   anyMainThread?: boolean | undefined;
   /** Where new thread tabs open; by default, per the thread placement setting. */
   threadPane?: TabPane | undefined;
+  /** Showing a tab visits its conversation; a page may only reveal it. */
+  visits?: boolean | undefined;
+  /** Opens another conversation's tab where it lives, from the tab's menu. */
+  navigation?: Pick<Navigation, "open"> | undefined;
   /** The route's thread request, handed only to the tab that matches it. */
   routed?:
     | { channelId: string; messageId: string; navigation: PageNavigation }
@@ -425,6 +435,7 @@ export function useConversationTabs({
         !!drawerContext &&
         openConversationLink(drawerContext.channelId, target),
     },
+    openMembers,
   );
   // The pane's page-local side panel, so a tab opened from outside the page
   // knows the pane is in use; it ends with this mount.
@@ -563,7 +574,7 @@ export function useConversationTabs({
     channelId: string,
     messageId: string,
     rootId: string,
-    intent?: "reply" | "reveal",
+    intent?: "reply" | "reveal" | "focus",
   ) => {
     if (!currentVisit()) return;
     // Flat sessions keep their side-only host; channels support both panes.
@@ -667,7 +678,7 @@ export function useConversationTabs({
   // Several open threads stay distinguishable by their original message.
   function threadLabel(tab: Extract<Tab, { kind: "thread" }>, name?: string) {
     if (tab.name) return tab.name;
-    const rootId = tab.rootId ?? tab.id.slice(tab.id.lastIndexOf(":") + 1);
+    const rootId = rootOfTab(tab);
     const root = queries.channels
       .window(tab.channelId)
       .rows.find((row) => row.id === rootId);
@@ -702,6 +713,31 @@ export function useConversationTabs({
         move: (delta: -1 | 1) => moveBy(tab, delta),
         rename: (name: string) => tabState.renameTab(tab.id, name),
       }),
+      // The current conversation's own threads are already in its channel.
+      ...(target &&
+        navigation &&
+        viewer &&
+        tab.channelId !== currentId && {
+          actions: [
+            {
+              label: "Open in channel",
+              run: () =>
+                void navigation.open({
+                  version: 1,
+                  kind: "conversation",
+                  scope: {
+                    viewer,
+                    communityOrigin: scope.slice(0, -(viewer.length + 1)),
+                  },
+                  channelId: tab.channelId,
+                  ...(tab.messageId && { messageId: tab.messageId }),
+                  ...(tab.kind === "thread" && {
+                    threadRootId: rootOfTab(tab),
+                  }),
+                }),
+            },
+          ],
+        }),
       content:
         !usable || !target ? (
           <p role="status" className={styles.empty}>
@@ -713,6 +749,7 @@ export function useConversationTabs({
           <ConversationTab
             focusOnMount={continuingVisit}
             active={tabState.paneOpen && selectedTab === tab.id}
+            visit={visits}
             tab={tab}
             channel={target}
             session={queries}
@@ -871,6 +908,7 @@ export function useConversationTabs({
             <ConversationTab
               focusOnMount={continuingVisit}
               active={active}
+              visit={visits}
               tab={tab}
               channel={target}
               session={queries}

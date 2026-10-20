@@ -70,7 +70,9 @@ test("the app runtime exposes ready bundled pages and removes them on disable", 
       );
       assert.equal(
         plugin.enabledByDefault,
-        !["buzz.bestie", "buzz.todos"].includes(plugin.manifest.id),
+        !["buzz.bestie", "buzz.todos", "buzz.usage"].includes(
+          plugin.manifest.id,
+        ),
         plugin.manifest.id,
       );
     }
@@ -253,30 +255,6 @@ test("the app runtime exposes ready bundled pages and removes them on disable", 
       assert.equal(
         services.panels.resolve(profileTarget)?.pluginId,
         "buzz.profiles",
-      ),
-    );
-
-    const usage = services.panels
-      .snapshot()
-      .find((panel) => panel.pluginId === "buzz.channel-usage");
-    assert.equal(usage.channelMenu.label, "View channel usage");
-    assert.equal(usage.matches("channel"), false);
-    await services.plugins.change("disable", "buzz.channel-usage");
-    assert.equal(services.panels.snapshot().includes(usage), false);
-    assert.ok(
-      services.pages
-        .snapshot()
-        .some((page) => page.pluginId === "buzz.channels"),
-    );
-    await services.plugins.change("enable", "buzz.channel-usage");
-    await vi.waitFor(() =>
-      assert.ok(
-        services.panels
-          .snapshot()
-          .some(
-            (panel) =>
-              panel.pluginId === "buzz.channel-usage" && panel !== usage,
-          ),
       ),
     );
 

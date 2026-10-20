@@ -1,4 +1,7 @@
+import { useSyncExternalStore } from "react";
 import type { PluginModule } from "../../plugins/api";
+import { handoffBackupSession } from "../../features/identity/backup";
+import { nativeIdentityEnabled } from "../../features/identity/service";
 import { Login } from "./login/Login";
 import {
   browserCredential,
@@ -13,7 +16,7 @@ import type { AgentProviderSnapshot } from "../../features/agents/service";
 import { Header, InlineHeader } from "../../shared/design-system/ui/Header";
 import { applyApps } from "./apps";
 
-export const inject = ["host", "settingsCards", "agents", "panels", "browser"];
+export const inject = ["host", "settingsCards", "agents", "relay", "panels", "browser"];
 export const apply: PluginModule["apply"] = (ctx) => {
   let unavailable = "";
   try {
@@ -31,6 +34,23 @@ export const apply: PluginModule["apply"] = (ctx) => {
   });
   ctx.effect(() => () => session.dispose());
   applyApps(ctx, session);
+  const backupSession = () => {
+    if (!nativeIdentityEnabled()) return;
+    handoffBackupSession(
+      "builderlab",
+      session.snapshot().status === "signed-in"
+        ? session.credential().value
+        : null,
+    );
+  };
+  ctx.effect(() => {
+    const stop = session.subscribe(backupSession);
+    return () => {
+      stop();
+      if (nativeIdentityEnabled()) handoffBackupSession("builderlab", null);
+    };
+  });
+
   const agents = createAgentClient(ctx.host, session);
   const loginAvailable = browserLoginAvailable() && !unavailable;
   if (!unavailable) {
@@ -43,7 +63,9 @@ export const apply: PluginModule["apply"] = (ctx) => {
       const state = session.snapshot();
       providerState = Object.freeze(
         state.status === "signed-in"
-          ? { readiness: "ready" }
+          ? state.account?.canUseRemoteAgents
+            ? { readiness: "ready" }
+            : { readiness: "attention", attentionLabel: "Coming soon" }
           : state.status === "pending"
             ? { readiness: "checking", blocking: true }
             : {
@@ -54,19 +76,28 @@ export const apply: PluginModule["apply"] = (ctx) => {
       for (const listener of providerListeners) listener();
     };
     const stopProvider = session.subscribe(updateProvider);
-    const ProviderDialogBody = () => (
-      <div className="grid gap-3">
-        <InlineHeader level={3} title="Connection" />
-        <Login
-          session={session}
-          available={loginAvailable}
-          active={() => true}
-          showHeading={false}
-        />
-      </div>
-    );
+    const ProviderDialogBody = () => {
+      const state = useSyncExternalStore(session.subscribe, session.snapshot);
+      return (
+        <div className="grid gap-3">
+          <InlineHeader level={3} title="Connection" />
+          <Login
+            session={session}
+            available={loginAvailable}
+            active={() => true}
+            showHeading={false}
+          />
+          {state.status === "signed-in" &&
+            !state.account?.canUseRemoteAgents && (
+              <p role="status" className="text-body-sm text-secondary">
+                Builderlab remote agents are coming soon for your account.
+              </p>
+            )}
+        </div>
+      );
+    };
     ctx.agents.register({
-      ...builderlabType(agents, session),
+      ...builderlabType(agents, session, ctx.relay),
       provider: {
         snapshot: () => providerState,
         subscribe: (listener) => {

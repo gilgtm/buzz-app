@@ -36,7 +36,6 @@ export const test = base.extend({
   /** The production broker's live setup deadline. It runs in Node, so the
    * page clock cannot hold it; a test that keeps EOSE pending sets it longer. */
   liveSetupTimeoutMs: [undefined, { option: true }],
-  archiveOnDisk: [false, { option: true }],
   actionProfile: [false, { option: true }],
   agentMessageDeletion: [false, { option: true }],
   profilePicture: ["", { option: true }],
@@ -83,6 +82,8 @@ export const test = base.extend({
   membershipActivity: [false, { option: true }],
   launchAnimation: [false, { option: true }],
   historyCounts: [{ alpha: 1, beta: 1 }, { option: true }],
+  // Rows sharing each history second; above the page size, pages split seconds.
+  historyRowsPerSecond: [1, { option: true }],
   channelIds: [channels, { option: true }],
   developmentReact: [false, { option: true, scope: "worker" }],
   pluginFixtures: [false, { option: true, scope: "worker" }],
@@ -98,7 +99,6 @@ export const test = base.extend({
       browser,
       productionBroker,
       liveSetupTimeoutMs,
-      archiveOnDisk,
       actionProfile,
       agentMessageDeletion,
       profilePicture,
@@ -142,6 +142,7 @@ export const test = base.extend({
       membershipActivity,
       launchAnimation,
       historyCounts,
+      historyRowsPerSecond,
       channelIds: channels,
       pluginFixtures,
       developmentReact,
@@ -440,10 +441,22 @@ export const test = base.extend({
                 ...(syntax.startsWith("@")
                   ? [["p", getPublicKey(peerKey)]]
                   : []),
+                // Shared seconds keep the send order real messages carry.
+                ...(historyRowsPerSecond > 1
+                  ? [
+                      [
+                        "ms",
+                        String(
+                          (i % historyRowsPerSecond) *
+                            Math.floor(1000 / historyRowsPerSecond),
+                        ),
+                      ],
+                    ]
+                  : []),
               ],
               `${community} ${channel} message ${i}\n${"Mixed height message content. ".repeat((1 + (i % 7) * 3) * (tallMessages ? 5 : 1))}${syntax ? `\n${syntax}` : ""}`,
               readState ? peerKey : userKey,
-              1700000100 + i,
+              1700000100 + Math.floor(i / historyRowsPerSecond),
             );
           }),
         );
@@ -924,6 +937,8 @@ export const test = base.extend({
         .map((entry) => entry.event);
     };
     const answer = (community, filter) => {
+      // These ordinary fixture channels have no Huddle creation receipt.
+      if (filter.kinds?.length === 1 && filter.kinds[0] === 9007) return [];
       // The real relay can return both current metadata and rosters in one query.
       if (filter.kinds?.includes(39000) && filter.kinds?.includes(39002))
         return [39000, 39002].flatMap((kind) =>
@@ -1785,6 +1800,7 @@ export const test = base.extend({
           "channel-sections",
           "channel-stars",
           "channel-sort",
+          "channel-filter",
         ].includes(sidebarCoordinate) ||
         (ownSoloChannels.length > 0 &&
           sidebarCoordinate?.startsWith("buzz-me-kit-v1:"))
@@ -2042,7 +2058,13 @@ export const test = base.extend({
             `Unexpected fixture request: ${request.method} ${request.url}`,
           );
         expect(body.length).toBeGreaterThan(0);
-        expect(body.length).toBeLessThanOrEqual(3);
+        expect(body.length).toBeLessThanOrEqual(
+          body.every(
+            (filter) => filter.kinds?.length === 1 && filter.kinds[0] === 9007,
+          )
+            ? 4
+            : 3,
+        );
         const filter = body[0];
         const result = [
           ...new Map(
@@ -2139,9 +2161,7 @@ export const test = base.extend({
                   next();
                 });
                 const broker = relayBrokerPlugin({
-                  archiveFile: archiveOnDisk
-                    ? testInfo.outputPath("archive.sqlite3")
-                    : ":memory:",
+                  archiveFile: ":memory:",
                   relayUrl: fixtureRelayUrl,
                   communityAliases: fixtureAliases,
                   identity: () => userKey.slice(),
@@ -2257,10 +2277,8 @@ export const test = base.extend({
         { viewer, profilePicture, iconCongestion },
       );
       await use({
-        archiveFile: archiveOnDisk
-          ? testInfo.outputPath("archive.sqlite3")
-          : undefined,
         sign: (template) => finalizeEvent(template, userKey),
+        channelMetadata: (id, tags) => sign(39000, [["d", id], ...tags]),
         signRelay: (template) => finalizeEvent(template, relayKey),
         membershipSnapshot(role) {
           expect(["owner", "admin", "member"]).toContain(role);
@@ -2512,7 +2530,11 @@ export const test = base.extend({
             Math.floor(Date.now() / 1000) + 1,
           );
           threadSummaries.push(event);
-          relay.publish("primary", event);
+          if (relay) relay.publish("primary", event);
+          else
+            for (const client of streams.get("primary") ?? [])
+              if (client.channels.includes("alpha"))
+                client.response.write(`data: ${JSON.stringify(event)}\n\n`);
           return event;
         },
         reply(rootId, own = false, deliver = true) {
