@@ -756,6 +756,15 @@ whose light gray fill holds up over the list where glass would disappear.
 The message hover toolbar uses the 12px rounded-container radius
 with a 2px inset. Its independent icon actions retain their shared 10px corners.
 
+Secondary actions on rows inside a compact inset container, currently queued
+follow-ups, use Button `subtle-muted` with `size="caption"`: a 32px control
+with caption text in `--text-subtle` that strengthens on hover, press and
+focus. Their removal glyph uses IconButton `destructive-quiet`, resting in
+`--text-quiet-control` (non-text contrast) and turning danger on hover and
+press. `shape="inset"` takes the container's `--control-inset-radius`
+(container radius minus inset) so nested corners stay concentric. Reuse these
+only for the same row-action role.
+
 Button labels stay on one line and do not shrink in flex layouts (`whitespace-nowrap
 shrink-0`). Parents must reflow whole controls or provide
 scrolling when space is limited. Composite reply summaries may reflow whole
@@ -763,6 +772,9 @@ avatar/count groups without wrapping individual labels. Thread reply summaries
 use the same 10px corners as icon actions, including hover and pressed fills.
 Small buttons use 16px
 side padding and 16px icons; medium and large use 24px side padding and 24px icons.
+Proposed: medium labelled buttons with a leading icon use 12px leading and 16px
+trailing padding for optical balance. Text-only and icon-only buttons retain their
+existing insets.
 Standard Button labels use the complete `text-label-sm` role with an 8px icon gap; the
 extra-small capsule uses `text-caption`. For a caption-sized inline choice such as
 the composer's model name, `size="inline"` keeps a 24px minimum target with 4px

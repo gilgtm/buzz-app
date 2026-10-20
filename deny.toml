@@ -62,5 +62,6 @@ ignore = true
 multiple-versions = "warn"
 wildcards = "allow"
 deny = [
+    { name = "webpki-roots", version = "<1.0.10", reason = "RUSTSEC-2026-0381: use the patched root bundle" },
     { name = "ringbuf", version = "<0.5.2", wrappers = ["neteq"], reason = "only audited NetEQ may declare this unused vulnerable dependency; all other consumers must use a patched release" },
 ]
