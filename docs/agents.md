@@ -89,6 +89,22 @@ one-off process; Codex: an ephemeral thread). Its signal aborts
 `STANDALONE_DEADLINE_MS` after it starts, including any wait for the harness to
 be ready. The prompt text lives in `attention-prompt.ts`.
 
+A plugin wakes an agent with `ctx.agents.wake(pubkey, { channel, root?, text })`,
+in the conversation of that channel and thread, or of a Solo chat when it leaves
+out `root`. It throws when this copy of the app does not run the agent or its
+mention lane is full. The wake is a `plugin` trigger in the mention lane, with
+the mention's rate limit, and is dropped like a queued mention when the agent
+stops running here. Nothing goes to the relay. Claude, Codex and goose take it
+on their mention path, without the owner check, since the plugin is the owner's
+installed code. `src/features/agent-harness/plugin-wake.ts` gives them a local
+anchor in place of the event (the thread's `e` tag, and a random id), and a
+`<plugin-wake>` section in place of `<buzz-event>`. That section says the plugin
+woke the agent, that neither the owner nor anyone in the channel wrote it, and
+that its text is data. The anchor's id is never published: failure reports and
+typing go to the thread root, or the channel itself in a Solo chat, and a wake
+with no `root` outside a Solo chat is ignored. A wake is not saved for resume
+and shows no activity row or Stop.
+
 A type marks its primary configuration tab with `role: "settings"`. In the
 Agents build view and profile panel, the host keeps that tab at a stable
 `Settings` destination and supplies the current type identity plus retype
@@ -132,6 +148,32 @@ the runtime like the corresponding per-agent save but does not mutate agent
 records. Codex uses an inherited thinking choice only when the effective model
 supports it, otherwise that model's default applies. Transient process/session
 state may appear in the Activity tab, but is not durable history.
+
+A type with `sessionControls` (Claude, Codex and goose) offers three immediate
+session controls in the composer's gauge popover: **Compact session**,
+**Start a new session**, and **Interrupt**. A side rail keeps all three visible.
+Compact and New are enabled while that harness session is idle; Interrupt is
+enabled while it is active, including work after a final Buzz reply. Disabled
+controls remain focusable and explain their state in a tooltip. The app holding
+the agent's runner performs the action; other copies explain where to use it.
+Send keeps its existing steering or Solo queue preference and carries no session
+action.
+While manual compaction runs, its icon shows a spinner and the composer says
+“Compacting session…”. Compact, New and Send (including Enter) are disabled;
+the draft remains editable and Interrupt remains available. Send returns when
+compaction finishes, fails or is interrupted. The block applies to messages
+targeting that harness session; other sessions remain usable.
+
+`sessionControls.scope(agent)` returns the agent's session scope. Controls appear in a
+thread, DM or Solo chat, and at a channel's top level for a channel-scoped agent.
+A thread-scoped agent's top-level message starts a thread of its own, so it has
+no existing session to control. goose compacts only a session still open. A new
+session is primed with the conversation on the next message. Compaction failures
+appear beside the controls. Session actions never travel on messages. A mention
+received during an action is accepted into that session's handoff and releases
+the agent's mention lane immediately. It waits for the action without spending
+its handover deadline; other conversations continue, and stopping the agent
+cancels the deferred work.
 
 Codex's provider model menu offers **Codex recommended** (the catalog's
 recommendation) and specific models. Blank model preferences follow the

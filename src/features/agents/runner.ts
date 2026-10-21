@@ -18,6 +18,7 @@ import {
   type RelayEvent,
 } from "../relay/events";
 import { wake } from "../agent-harness/wakes";
+import { type PluginTrigger, wakeLands } from "../agent-harness/plugin-wake";
 import { STANDALONE_DEADLINE_MS } from "../agent-harness/standalone";
 import { EFFORT_TAG, MODEL_TAG } from "../relay/messages";
 import type { LiveBatch } from "../relay/incoming";
@@ -170,13 +171,16 @@ type Job = {
 };
 type WatchTrigger = Extract<Trigger, { type: "watch" }>;
 type CatchUpTrigger = Extract<Trigger, { type: "catch-up" }>;
-/** Mentions and watch work queue and are rate limited apart. */
+/** Mentions and watch work queue and are rate limited apart; a plugin's wake
+ * goes with mentions. */
 type Lane = "mention" | "watch";
+const addressed = (trigger: Trigger) =>
+  trigger.type === "mention" || trigger.type === "plugin";
 const laneOf = (trigger: Trigger): Lane =>
-  trigger.type === "mention" ? "mention" : "watch";
+  addressed(trigger) ? "mention" : "watch";
 /** The Interest whose lane runs the attention job, or undefined for a mention. */
 const interestOf = (trigger: Trigger) =>
-  trigger.type === "mention"
+  addressed(trigger)
     ? undefined
     : (trigger.type === "timer" ? trigger.timer : trigger.watch).interest_id;
 const channelOf = (event: RelayEvent) =>
@@ -302,6 +306,8 @@ const message = (error: unknown) =>
 
 /** What the runner needs of its host. */
 export type RunnerHost = {
+  /** Session controls refresh when this copy gains or loses native custody. */
+  ownershipChanged?(): void;
   /** The agent, while its community is live to run it in. */
   ready(pubkey: string): Agent | undefined;
   /** A running agent, in any community. */
@@ -391,6 +397,7 @@ export type RunnerHost = {
         | "audienceAuthority"
         | "upload"
         | "media"
+        | "gitAuth"
         | "remember"
       >
     | undefined;
@@ -524,6 +531,15 @@ export class AgentRunners {
     this.admit(runner);
     void this.drain(runner);
   }
+  /** Queues a plugin's wake in the agent's mention lane. Throws when this
+   * copy does not run the agent, or the lane is full. */
+  wakeIn(pubkey: string, trigger: PluginTrigger) {
+    const runner = this.runners.get(pubkey);
+    if (!runner || !this.runs(pubkey) || !this.host.ready(pubkey))
+      throw new Error("This copy of Buzz does not run that agent");
+    if (!this.enqueue(runner, { trigger, channelId: trigger.channel }))
+      throw new Error("The agent is busy and could not take this wake");
+  }
   /** Whether this copy runs the agent: its type can run it, and no other
    * copy of the app holds it. */
   runs(pubkey: string) {
@@ -565,6 +581,21 @@ export class AgentRunners {
   /** Whether a change of type holds the agent's runner now. */
   transitioning(pubkey: string) {
     return this.runners.get(pubkey)?.transitioning === true;
+  }
+  /** Session mutations require a current, successful native custody check. */
+  async control<T>(pubkey: string, change: () => Promise<T>): Promise<T> {
+    const runner = this.runners.get(pubkey);
+    if (
+      !runner ||
+      !(await this.claimForRetype(runner)) ||
+      this.runners.get(pubkey) !== runner ||
+      runner.transitioning ||
+      !this.host.ready(pubkey)
+    )
+      throw new Error(
+        "Use session controls in the Buzz app that runs this agent.",
+      );
+    return change();
   }
   /** Runs `change` while a change of type holds the agent's idle runner: no
    * turn starts meanwhile, and its queue resumes after. Refused while a turn
@@ -1679,7 +1710,7 @@ export class AgentRunners {
     const agent = this.host.agent(runner.pubkey);
     if (!agent) return false;
     const { trigger } = job;
-    if (trigger.type === "mention") return true;
+    if (addressed(trigger)) return true;
     if (trigger.type === "watch" || trigger.type === "catch-up")
       return !!this.current(runner, agent, job);
     // A timer occurrence belongs to the object and epoch it fell due under:
@@ -1961,7 +1992,7 @@ export class AgentRunners {
       });
       const { trigger } = job;
       const runOnce = type.runOnce?.bind(type);
-      if (trigger.type === "mention" || !runOnce) return run(delivery);
+      if (addressed(trigger) || !runOnce) return run(delivery);
       // A watch or timer is a standalone turn; this lane is held until it ends.
       delivery.workingUntil(
         wake(
@@ -2052,6 +2083,8 @@ export class AgentRunners {
       upload: async (data: string, mime: string) =>
         this.require().upload(agent.pubkey, data, mime),
       media: async (url: string) => this.require().media(agent.pubkey, url),
+      gitAuth: async (owner: string, repo: string) =>
+        this.require().gitAuth(agent.pubkey, owner, repo),
       remember: async (slug: string, body: string, after: number) => {
         const event = await this.require().remember(
           agent.pubkey,
@@ -2079,11 +2112,21 @@ export class AgentRunners {
     agent: Agent,
   ) {
     work?.started();
-    const event = trigger.type === "mention" ? trigger.event : undefined;
+    // A plugin's wake types in its thread as a mention of the root would, and
+    // one with no thread only in a Solo chat (`wakeLands`): never at its own id.
+    const wake = trigger.type === "plugin" ? trigger : undefined;
+    const event =
+      trigger.type === "mention"
+        ? trigger.event
+        : wake && { id: wake.root ?? wake.id, tags: [["h", wake.channel]] };
     const channel =
       event && (channelId ?? event.tags.find((tag) => tag[0] === "h")?.[1]);
-    // Saved while it works, so a reload that stops it gives it again.
-    const resumable = event && runner.type?.resumes ? event.id : undefined;
+    // Saved while it works, so a reload that stops it gives it again. A
+    // plugin's wake has no event to read again.
+    const resumable =
+      trigger.type === "mention" && runner.type?.resumes
+        ? trigger.event.id
+        : undefined;
     if (resumable) this.mark(runner.pubkey, resumable, channel ?? "");
     let typing: (() => void) | undefined;
     const beginTyping = () => {
@@ -2092,7 +2135,13 @@ export class AgentRunners {
         // Straight to custody, so pulses stay out of what it wrote.
         async (pulse) => this.require().publish(runner.pubkey, pulse),
         // Where its turn answers, read the same way.
-        this.host.soloChat(agent, channel, runner.controller.signal),
+        this.host
+          .soloChat(agent, channel, runner.controller.signal)
+          .then((flat) => {
+            if (wake && !wakeLands(wake, flat))
+              throw new Error("The wake has no conversation here");
+            return flat;
+          }),
         event,
         channel,
         runner.typing,
@@ -2157,23 +2206,28 @@ export class AgentRunners {
     };
   }
 
+  private claimed(runner: Runner, held: boolean) {
+    const before = this.runs(runner.pubkey);
+    runner.mayHold = held;
+    runner.asked = true;
+    this.heldChanged(runner, before);
+    if (before !== this.runs(runner.pubkey)) this.host.ownershipChanged?.();
+    return held;
+  }
   private async claim(runner: Runner) {
-    const held = this.runs(runner.pubkey);
     try {
-      runner.mayHold = (await this.host.custody?.claim(runner.pubkey)) ?? false;
-      runner.asked = true;
-      return runner.mayHold;
+      return this.claimed(
+        runner,
+        (await this.host.custody?.claim(runner.pubkey)) ?? false,
+      );
     } catch (error) {
-      runner.mayHold = true;
-      runner.asked = true;
+      this.claimed(runner, true);
       // Answering twice beats not answering at all.
       console.warn(
         `Agent ${this.host.agent(runner.pubkey)?.name} was not claimed`,
         error,
       );
       return true;
-    } finally {
-      this.heldChanged(runner, held);
     }
   }
   /** The notice lists an agent's saved turns only while this copy holds it,
@@ -2185,14 +2239,14 @@ export class AgentRunners {
   /** Claims exclusively for a provider migration. Unlike turn execution,
    * uncertainty is unsafe here because changing native type is destructive. */
   private async claimForRetype(runner: Runner) {
-    runner.mayHold = (await this.host.custody?.claim(runner.pubkey)) ?? false;
-    return runner.mayHold;
+    return this.claimed(
+      runner,
+      (await this.host.custody?.claim(runner.pubkey)) ?? false,
+    );
   }
   private async release(runner: Runner) {
     if (!runner.mayHold) return;
-    const held = this.runs(runner.pubkey);
-    runner.mayHold = false;
-    this.heldChanged(runner, held);
+    this.claimed(runner, false);
     await this.host.custody
       ?.release(runner.pubkey)
       .catch((error) =>
