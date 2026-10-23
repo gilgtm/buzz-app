@@ -142,6 +142,7 @@ export type SoloProjection = Readonly<{
   roots: readonly string[];
   children: ReadonlyMap<string, readonly string[]>;
   included: ReadonlySet<string>;
+  matching: ReadonlySet<string>;
   context: ReadonlySet<string>;
   outside?: string | undefined;
   excluded: number;
@@ -166,6 +167,7 @@ export function projectSolo(
       included.add(channel.id);
   }
 
+  const matching = new Set(included);
   const outside =
     current && byId.has(current) && !included.has(current)
       ? current
@@ -197,6 +199,7 @@ export function projectSolo(
       ]),
     ),
     included,
+    matching,
     context,
     outside,
     excluded: channels.length - included.size,

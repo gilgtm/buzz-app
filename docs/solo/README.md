@@ -304,6 +304,27 @@ remain owned by the original message. Navigation and access rules are unchanged.
 
 ## Owners and validation limits
 
+An optional `soloNavigation` v1 contribution can name the Solo sidebar and add
+bounded task metadata. The host keeps roster, titles, access and navigation
+authority. Team is unchanged. The host rejects invalid snapshots as a whole and
+restores ordinary Solo. `dataRevision()` is the metadata revision; contribution
+`revision` remains the plugin revision. Plugins must use optional nested injection
+so older hosts can still activate their other surfaces.
+
+The enhanced list groups by Workspace, Status or None, and filters or sorts roots
+and sibling workers. Workers follow their root's saved workspace. A nested chat's
+own assignment remains dormant until it becomes a root or the contribution stops.
+All Move controls recheck structural placement before a write, including both New
+workspace dialogs. Root moves return the view to Workspace. Only expanded current
+and ancestor cards expose Workers; manual close does not navigate or mark read.
+View choices use the account/community partition and remain local when a save
+fails. Cross-window changes to the actual preference key take precedence.
+
+Version 1 also certifies the optional sixth `active` argument on
+`channelWrites.create(id, title, ttl, named, members, active)`. It forwards the gate
+to Outbox, which checks it again before publication and requires a fresh gate for
+a restored guarded operation. This does not change existing unguarded callers.
+
 `src/bundled/channels/ChannelsPage.tsx` owns every conversation, including the
 Solo treatment (`SoloHeading`, the shared `ChannelMembersDialog`) and drafts; `SoloWorkspaces` and
 `features/channel-navigation/SoloInventory.tsx` own the Solo half of

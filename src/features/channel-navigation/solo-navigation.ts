@@ -3,7 +3,12 @@ import {
   createContributions,
   type Contribution,
 } from "../../plugins/contributions";
-import { readView, subscribeView, writeView } from "../../shared/view-state";
+import {
+  readView,
+  subscribeView,
+  writeView,
+  viewRevision,
+} from "../../shared/view-state";
 import type { RelayData } from "../relay/service";
 import type { RelaySession } from "../relay/session";
 import type {
@@ -30,7 +35,7 @@ export type SoloNavigationSnapshot = Readonly<{
 export type SoloNavigationReader = {
   snapshot(): SoloNavigationSnapshot | undefined;
   subscribe(listener: () => void): () => void;
-  setOptions(options: SoloViewOptions): void;
+  setOptions(options: SoloViewOptions, notice?: string): void;
   create(): Promise<void>;
 };
 const readers = new WeakMap<RelaySession, SoloNavigationReader>();
@@ -53,6 +58,7 @@ export class SoloNavigationService
   private sourceRevision: number | undefined;
   private rows: readonly SoloTaskRow[] | undefined;
   private options: SoloViewOptions = SOLO_VIEW_DEFAULTS;
+  private savedView: string | null | undefined;
   private notice: string | undefined;
   private stopSource: (() => void) | undefined;
   private stopSession: (() => void) | undefined;
@@ -134,11 +140,17 @@ export class SoloNavigationService
               this.refresh();
             })
           : undefined;
-      this.readOptions();
+      this.readOptions(true);
     }
     this.refresh();
   };
-  private readOptions() {
+  private readOptions(force = false) {
+    const saved =
+      this.binding && this.winner
+        ? viewRevision(this.binding.scope, `solo-view:${this.winner.key}`)
+        : undefined;
+    if (!force && saved === this.savedView) return;
+    this.savedView = saved;
     this.options =
       this.binding && this.winner
         ? soloViewOptions(
@@ -152,7 +164,8 @@ export class SoloNavigationService
         ? entry.order
         : 0;
     const winner = [...this.contributions.snapshot()].sort(
-      (a, b) => order(a) - order(b) || a.key.localeCompare(b.key),
+      (a, b) =>
+        order(a) - order(b) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
     )[0];
     if (winner !== this.winner) {
       this.stopSource?.();
@@ -161,7 +174,7 @@ export class SoloNavigationService
       this.sourceRevision = undefined;
       this.rows = undefined;
       this.notice = undefined;
-      this.readOptions();
+      this.readOptions(true);
       try {
         this.stopSource = winner?.subscribe(this.refresh);
       } catch {
@@ -197,7 +210,8 @@ export class SoloNavigationService
     this.value = next;
     this.publish();
   };
-  setOptions = (options: SoloViewOptions) => {
+  setOptions = (options: SoloViewOptions, notice?: string) => {
+    this.notice = notice;
     this.options = soloViewOptions(options);
     if (
       this.binding &&
@@ -247,6 +261,9 @@ export function prepareSoloMove(session: RelaySession, id: string) {
   const reader = soloNavigationFor(session);
   const snapshot = reader?.snapshot();
   if (snapshot && snapshot.options.group !== "workspace")
-    reader?.setOptions({ ...snapshot.options, group: "workspace" });
+    reader?.setOptions(
+      { ...snapshot.options, group: "workspace" },
+      "Grouped by Workspace.",
+    );
   return undefined;
 }

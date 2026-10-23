@@ -379,3 +379,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.organizedRow[data-navigation-card] {
+  flex-wrap: wrap;
+}
+.workerFooter {
+  flex: 0 0 100%;
+  padding: var(--space-1) var(--space-2);
+}
+.workerChildren {
+  padding-inline-start: clamp(var(--space-1), 2vw, var(--space-3));
+}
+.workerFooter button[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+
+.organizedRow[data-navigation-card]
+  :is([data-solo-row-action], [data-solo-shared], [data-channel-activity]) {
+  top: var(--space-4);
+}

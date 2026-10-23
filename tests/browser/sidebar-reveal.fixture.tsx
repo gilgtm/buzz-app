@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { useSidebarView } from "../../src/bundled/channels/useSidebarView";
+import {
+  useSidebarView,
+  requestSidebarPlacementReveal,
+} from "../../src/bundled/channels/useSidebarView";
 
 // The real sidebar view hook over a plain list with real layout. The page
 // controls when the hook is mounted, where it navigates, and when the
@@ -12,12 +15,25 @@ declare global {
     sidebar: {
       update(next: Partial<State>): void;
       rows: typeof rows;
+      place(id: number): void;
     };
   }
 }
 
 function Sidebar({ at, rows }: Omit<State, "mounted">) {
   const view = useSidebarView("fixture", true, at);
+  const placed = useRef(false);
+  window.sidebar.place = (id) => {
+    const row = view.list.current?.querySelector<HTMLElement>(
+      `[data-row="${id}"]`,
+    );
+    if (!row || !view.list.current) throw new Error("Missing row");
+    if (!placed.current) {
+      view.list.current.append(row);
+      placed.current = true;
+    }
+    requestSidebarPlacementReveal(row);
+  };
   return (
     <nav
       aria-label="Sidebar"
@@ -47,6 +63,7 @@ function Harness() {
   window.sidebar = {
     update: (next) => setState((state) => ({ ...state, ...next })),
     rows,
+    place: () => {},
   };
   return state.mounted ? <Sidebar at={state.at} rows={state.rows} /> : null;
 }

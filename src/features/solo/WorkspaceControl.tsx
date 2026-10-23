@@ -1,4 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useSoloNavigation } from "../channel-navigation/solo-navigation-react";
+import {
+  soloMovePolicy,
+  prepareSoloMove,
+} from "../channel-navigation/solo-navigation";
 import type { RelaySession } from "../relay/session";
 import {
   CaretDownIcon,
@@ -35,6 +40,33 @@ export function WorkspaceControl({
     if (typeof subscribe !== "function") return;
     return subscribe(() => setSnapshot(session.soloPreferences.snapshot()));
   }, [session]);
+  useSoloNavigation(session);
+  const follows = channelId ? soloMovePolicy(session, channelId) : undefined;
+  const [open, setOpen] = useState(false);
+  const host = useRef<HTMLSpanElement>(null);
+  const hadFocus = useRef(false);
+  const rootId = follows?.root;
+  useLayoutEffect(() => {
+    if (
+      rootId &&
+      hadFocus.current &&
+      document.activeElement === document.body
+    ) {
+      const dialog = host.current?.closest('[role="dialog"]');
+      const target =
+        dialog?.querySelector<HTMLElement>("button:not(:disabled)") ??
+        document.querySelector<HTMLElement>(
+          `[data-solo-channel-id="${CSS.escape(rootId)}"]`,
+        );
+      target?.focus({ preventScroll: true });
+    }
+    return () => {
+      hadFocus.current = !!host.current?.contains(document.activeElement);
+    };
+  }, [rootId]);
+  useEffect(() => {
+    if (follows) setOpen(false);
+  }, [follows]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const projectId =
@@ -49,6 +81,12 @@ export function WorkspaceControl({
       return;
     }
     if (!channelId) return;
+    const blocked = prepareSoloMove(session, channelId);
+    if (blocked) {
+      setOpen(false);
+      setError(blocked);
+      return;
+    }
     setBusy(true);
     void session.soloPreferences
       .assign(channelId, next || undefined)
@@ -57,10 +95,16 @@ export function WorkspaceControl({
       )
       .finally(() => setBusy(false));
   };
+  if (follows && !onChange)
+    return (
+      <span ref={host} className="text-caption text-subtle">
+        Workspace follows {follows.title}
+      </span>
+    );
   const name = project ? `Workspace: ${project.name}` : "Add workspace";
   return (
-    <span>
-      <MenuRoot>
+    <span ref={host}>
+      <MenuRoot open={open} onOpenChange={setOpen}>
         <MenuTrigger
           disabled={
             disabled ||

@@ -1,0 +1,442 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { Context } from "@deepseek-ai/cordis";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, expect, it, vi } from "vitest";
+import {
+  fixture,
+  owners,
+  id,
+  other,
+  scope,
+} from "../../app/shell/sidebar-testing";
+import { stubAvatarBrowserApis } from "../agents/avatar-testing";
+import { SoloNavigationService } from "./solo-navigation";
+import type { SoloTaskRow, SoloEnhancement } from "./solo-navigation-contract";
+import { SoloHeading } from "../../bundled/channels/SoloHeading";
+import { WorkspaceControl } from "../solo/WorkspaceControl";
+import { ToastProvider } from "../../shared/design-system/ui/Toast";
+import { conversationTarget, soloDraftTarget } from "./routes";
+stubAvatarBrowserApis();
+const contexts: Context[] = [];
+afterEach(async () => {
+  cleanup();
+  for (const ctx of contexts.splice(0)) await ctx.fiber.dispose();
+  for (const owner of owners.splice(0)) owner.dispose();
+  localStorage.clear();
+});
+async function enhancedFixture(rows: readonly SoloTaskRow[], newer = 0) {
+  const root = new Context();
+  contexts.push(root);
+  root.provide("pluginStatus", {
+    isActive: () => true,
+    subscribe: () => () => {},
+  });
+  let service: SoloNavigationService | undefined;
+  const f = fixture(
+    true,
+    false,
+    undefined,
+    undefined,
+    newer,
+    undefined,
+    (relay) => (service = new SoloNavigationService(root, relay)),
+  );
+  let revision = 0;
+  let changed = () => {};
+  const run = vi.fn();
+  const descriptor: SoloEnhancement = {
+    id: "tasks",
+    title: "Nexus",
+    childNoun: { one: "Worker", other: "Workers" },
+    dataRevision: () => revision,
+    subscribe(listener) {
+      changed = listener;
+      return () => {
+        changed = () => {};
+      };
+    },
+    read: () => ({ rows }),
+    create: { label: "New task…", run },
+  };
+  const fiber = root
+    .extend({ pluginOwner: { id: "test.tasks", revision: "one" } })
+    .plugin((ctx) => ctx.soloNavigation.register(descriptor));
+  await act(async () => {
+    await fiber.await();
+  });
+  return {
+    ...f,
+    service,
+    run,
+    disable: () => act(async () => fiber.dispose()),
+    replace: () =>
+      act(async () => {
+        await root
+          .extend({ pluginOwner: { id: "replacement", revision: "two" } })
+          .plugin((ctx) =>
+            ctx.soloNavigation.register({ ...descriptor, order: -1 }),
+          )
+          .await();
+      }),
+    update(next: readonly SoloTaskRow[]) {
+      act(() => {
+        rows = next;
+        revision++;
+        changed();
+      });
+    },
+  };
+}
+const parent: SoloTaskRow = {
+  channelId: id,
+  status: "running",
+  subtitle: "Build sidebar",
+  details: [{ label: "Branch", value: "task/sidebar" }],
+};
+const child: SoloTaskRow = {
+  channelId: other,
+  parentChannelId: id,
+  status: "waiting",
+};
+
+it("shows one enhanced Solo inventory, keeps ordinary recovery controls, and restores all names on disable", async () => {
+  const user = userEvent.setup();
+  const f = await enhancedFixture([parent]);
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+    "All",
+    "Team",
+    "Nexus",
+  ]);
+  expect(
+    screen.getByRole("navigation", { name: "Nexus conversations" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Planning/ })).toHaveTextContent(
+    "Build sidebar · Running",
+  );
+  await user.click(screen.getByRole("button", { name: "Group and sort" }));
+  await user.click(
+    await screen.findByRole("menuitemradio", { name: "All tasks" }),
+  );
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("button", { name: /^Other/ })).toHaveTextContent(
+    "Open chat — outside filter",
+  );
+  await user.click(
+    screen.getByRole("button", { name: "New chat or workspace" }),
+  );
+  await user.click(screen.getByRole("menuitem", { name: "New task…" }));
+  expect(f.run).toHaveBeenCalledOnce();
+  await f.disable();
+  expect(screen.getByRole("tab", { name: "Solo" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("navigation", { name: "Solo conversations" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Group and sort" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: /^Planning/ }),
+  ).not.toHaveTextContent("Running");
+});
+
+it("keeps Workers inside expanded cards, respects manual close, and reveals only successful/reparented paths", async () => {
+  const user = userEvent.setup();
+  const f = await enhancedFixture([parent, child]);
+  // The initially current child retains its parent context, without selecting it.
+  const row = screen.getByRole("button", { name: /^Planning/ });
+  expect(row).not.toHaveAttribute("aria-current");
+  expect(row).toHaveTextContent("Contains current task");
+  const workers = screen.getByRole("button", { name: /1 Worker/ });
+  expect(workers.closest("[data-navigation-card]")).toContainElement(row);
+  expect(workers.closest("[data-navigation-card]")).not.toContainElement(
+    screen.getByRole("button", { name: /^Other/ }),
+  );
+  expect(workers.closest("button")).toBe(workers);
+  expect(workers).toHaveAttribute("aria-expanded", "true");
+  await user.click(workers);
+  expect(
+    screen.queryByRole("button", { name: /^Other/ }),
+  ).not.toBeInTheDocument();
+  f.update([parent, child]);
+  expect(workers).toHaveAttribute("aria-expanded", "false");
+  f.navigationStatus("failed");
+  expect(workers).toHaveAttribute("aria-expanded", "false");
+  f.navigationStatus("opened");
+  expect(workers).toHaveAttribute("aria-expanded", "true");
+  await user.click(row);
+  expect(screen.getByText("Branch: task/sidebar")).toBeInTheDocument();
+  expect(workers).toHaveAttribute("aria-expanded", "false");
+  await user.click(workers);
+  await user.click(screen.getByRole("button", { name: /^Other/ }));
+  expect(workers).toHaveAttribute("aria-expanded", "true");
+  await act(async () => {
+    await f.navigator.open(soloDraftTarget(scope));
+  });
+  expect(
+    screen.queryByRole("button", { name: /Worker/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /^Other/ }),
+  ).not.toBeInTheDocument();
+  await act(async () => {
+    await f.navigator.open(conversationTarget(scope, other));
+  });
+  expect(screen.getByRole("button", { name: /^Other/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  f.update([parent, { channelId: other, status: "waiting" }]);
+  expect(
+    screen.queryByRole("button", { name: /Worker/ }),
+  ).not.toBeInTheDocument();
+  f.update([parent, child]);
+  expect(screen.getByRole("button", { name: /Worker/ })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+});
+
+it.each(["sidebar", "header"])(
+  "revalidates the %s New workspace dialog before it can create or assign",
+  async (surface) => {
+    const user = userEvent.setup();
+    const f = await enhancedFixture([
+      parent,
+      { channelId: other, status: "waiting" },
+    ]);
+    const assign = vi.fn(async () => {}),
+      createAndAssign = vi.fn(async () => {});
+    const preferences = {
+      status: "ready" as const,
+      data: {
+        sections: [{ id: "work", name: "Work", order: 0 }],
+        assignments: {},
+        starred: [],
+        muted: [],
+      },
+    };
+    act(() =>
+      Object.assign(f.session.soloPreferences, {
+        writable: true,
+        sectionCreationWritable: true,
+        snapshot: () => preferences,
+        assign,
+        createAndAssign,
+      }),
+    );
+    f.update([parent, { channelId: other, status: "waiting" }]);
+    if (surface === "header") {
+      const channel = f.session.channels
+        .list()
+        .channels.find((channel) => channel.id === other);
+      if (!channel) throw new Error("Missing chat");
+      render(
+        <ToastProvider>
+          <SoloHeading
+            session={f.session}
+            scope={scope}
+            channel={channel}
+            navigator={f.navigator}
+            onConvert={() => {}}
+            onLifecycle={() => {}}
+          />
+        </ToastProvider>,
+      );
+    }
+    await user.click(
+      screen.getByRole("button", {
+        name: surface === "sidebar" ? "Actions for Other" : "Chat actions",
+      }),
+    );
+    const move = await screen.findByRole("menuitem", { name: "Move to" });
+    move.focus();
+    await user.keyboard("{ArrowRight}");
+    const create = await screen.findByRole("menuitem", {
+      name: "New workspace…",
+    });
+    create.focus();
+    await user.keyboard("{Enter}");
+    await user.type(
+      screen.getByRole("textbox", { name: "Workspace name" }),
+      "Should not exist",
+    );
+    f.update([parent, child]);
+    expect(
+      screen.getByRole("dialog", { name: "Create new workspace" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create and move" }));
+    expect(
+      screen.queryByRole("dialog", { name: "Create new workspace" }),
+    ).not.toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    expect(createAndAssign).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("Workspace follows Planning"),
+    ).toBeInTheDocument();
+  },
+);
+
+it("closes the saved workspace chooser when metadata makes its chat nested and restores ordinary placement on disable", async () => {
+  const user = userEvent.setup();
+  const f = await enhancedFixture([
+    parent,
+    { channelId: other, status: "waiting" },
+  ]);
+  const assign = vi.fn(async () => {});
+  const preferences = {
+    status: "ready" as const,
+    data: {
+      sections: [{ id: "work", name: "Work", order: 0 }],
+      assignments: { [other]: "work" },
+      starred: [],
+      muted: [],
+    },
+  };
+  act(() =>
+    Object.assign(f.session.soloPreferences, {
+      writable: true,
+      snapshot: () => preferences,
+      assign,
+    }),
+  );
+  f.update([parent, { channelId: other, status: "waiting" }]);
+  render(<WorkspaceControl session={f.session} channelId={other} />);
+  await user.click(screen.getByRole("button", { name: "Workspace: Work" }));
+  expect(
+    await screen.findByRole("menuitemradio", { name: "No workspace" }),
+  ).toBeInTheDocument();
+  f.update([parent, child]);
+  expect(
+    screen.queryByRole("menuitemradio", { name: "No workspace" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("Workspace follows Planning")).toBeInTheDocument();
+  expect(assign).not.toHaveBeenCalled();
+  await f.disable();
+  expect(
+    screen.getByRole("button", { name: "Workspace: Work" }),
+  ).toBeInTheDocument();
+});
+
+it("retains a root for an unread hidden worker and exposes activity on its compact card", async () => {
+  const f = await enhancedFixture([parent, child], 10);
+  f.channelUnread(id, 0);
+  f.channelUnread(other, 1);
+  await act(async () => {
+    await f.navigator.open(soloDraftTarget(scope));
+  });
+  expect(screen.getByRole("button", { name: /^Planning/ })).toHaveTextContent(
+    "1 unread",
+  );
+  expect(
+    screen.queryByRole("button", { name: /Worker/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /^Other/ }),
+  ).not.toBeInTheDocument();
+});
+
+it("keeps a 0-of-1 disclosure target in the DOM and reveals the current path on direct owner replacement", async () => {
+  const user = userEvent.setup();
+  const f = await enhancedFixture([parent, child]);
+  await user.click(screen.getByRole("button", { name: /1 Worker/ }));
+  expect(screen.getByRole("button", { name: /1 Worker/ })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await f.replace();
+  expect(screen.getByRole("button", { name: /1 Worker/ })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await act(async () => {
+    await f.navigator.open(conversationTarget(scope, id));
+  });
+  f.update([parent, { ...child, status: "archived" }]);
+  act(() =>
+    f.service?.setOptions({
+      group: "status",
+      sort: "recent",
+      show: "active-tasks",
+    }),
+  );
+  const workers = screen.getByRole("button", { name: /0 of 1 Worker/ });
+  const target = workers.getAttribute("aria-controls");
+  expect(target && document.getElementById(target)).toBeInTheDocument();
+  expect(workers).toHaveAttribute("aria-expanded", "false");
+});
+
+it("keeps workers in root groups, moves only the root, and restores dormant child assignments on disable", async () => {
+  const user = userEvent.setup();
+  const f = await enhancedFixture([parent, child]);
+  let preferences = {
+    status: "ready" as const,
+    data: {
+      sections: [
+        { id: "work", name: "Work", order: 0 },
+        { id: "child-work", name: "Child work", order: 1 },
+        { id: "destination", name: "Destination", order: 2 },
+      ],
+      assignments: { [id]: "work", [other]: "child-work" },
+      starred: [],
+      muted: [],
+    },
+  };
+  const listeners = new Set<() => void>();
+  const assign = vi.fn(async (channelId: string, projectId?: string) => {
+    preferences = {
+      ...preferences,
+      data: {
+        ...preferences.data,
+        assignments: {
+          ...preferences.data.assignments,
+          [channelId]: projectId ?? "",
+        },
+      },
+    };
+    for (const listener of listeners) listener();
+  });
+  act(() =>
+    Object.assign(f.session.soloPreferences, {
+      writable: true,
+      snapshot: () => preferences,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      assign,
+    }),
+  );
+  f.update([parent, child]);
+  const placement = () =>
+    screen
+      .getByRole("button", { name: /^Other/ })
+      .closest("[data-solo-project]")
+      ?.getAttribute("data-solo-project");
+  expect(placement()).toBe("work");
+  act(() =>
+    f.service?.setOptions({ group: "status", sort: "name", show: "all-chats" }),
+  );
+  expect(placement()).toBe("@status:running");
+  act(() =>
+    f.service?.setOptions({ group: "none", sort: "name", show: "all-chats" }),
+  );
+  expect(placement()).toBe("@none");
+  await user.click(
+    screen.getByRole("button", { name: "Actions for Planning" }),
+  );
+  const move = await screen.findByRole("menuitem", { name: "Move to" });
+  move.focus();
+  await user.keyboard("{ArrowRight}");
+  const destination = await screen.findByRole("menuitem", {
+    name: "Destination",
+  });
+  destination.focus();
+  await user.keyboard("{Enter}");
+  expect(assign).toHaveBeenCalledExactlyOnceWith(id, "destination");
+  expect(f.service?.snapshot()?.options.group).toBe("workspace");
+  expect(placement()).toBe("destination");
+  await f.disable();
+  expect(placement()).toBe("child-work");
+});

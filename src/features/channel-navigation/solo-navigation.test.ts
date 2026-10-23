@@ -7,7 +7,10 @@ import type { RelayData } from "../relay/service";
 import type { SoloTaskRow } from "./solo-navigation-contract";
 import { SoloNavigationService, soloMovePolicy } from "./solo-navigation";
 import { writeView } from "../../shared/view-state";
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  localStorage.clear();
+  vi.restoreAllMocks();
+});
 it("uses one scoped snapshot for placement without a sidebar, fences replacement, and restores fallback", async () => {
   const root = new Context();
   root.provide("pluginStatus", {
@@ -83,6 +86,26 @@ it("uses one scoped snapshot for placement without a sidebar, fences replacement
       sort: "recent",
       show: "all-chats",
     });
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("quota");
+      });
+    service.setOptions({ group: "status", sort: "name", show: "all-tasks" });
+    expect(service.snapshot()?.notice).toContain("could not be saved");
+    setItem.mockRestore();
+    writeView("scope", "unrelated-composer", { text: "changed" });
+    expect(service.snapshot()?.options).toEqual({
+      group: "status",
+      sort: "name",
+      show: "all-tasks",
+    });
+    writeView("scope", "solo-view:example/tasks", {
+      group: "workspace",
+      sort: "recent",
+      show: "all-chats",
+    });
+    expect(service.snapshot()?.options.group).toBe("workspace");
     rows = [
       { channelId: "parent", parentChannelId: "child", status: "running" },
       { channelId: "child", parentChannelId: "parent", status: "waiting" },

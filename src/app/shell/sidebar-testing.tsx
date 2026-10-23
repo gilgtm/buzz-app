@@ -15,6 +15,7 @@ import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { SoloInventory } from "../../features/channel-navigation/SoloInventory";
 import { conversationTarget } from "../../features/channel-navigation/routes";
 import type { ContributionReader } from "../../features/conversation/contracts";
+import type { SoloNavigationReader } from "../../features/channel-navigation/solo-navigation";
 import type { ChatIcon } from "../../features/conversation/service";
 
 export const owners: ReturnType<typeof createRelaySession>[] = [];
@@ -33,6 +34,7 @@ export function fixture(
   /** Newer, read Solo chats ahead of Planning and Other; only Planning is unread. */
   newer = 0,
   chatIcons?: ContributionReader<ChatIcon>,
+  enhance?: (relay: RelayData) => SoloNavigationReader,
 ) {
   const owner = createRelaySession(null);
   owners.push(owner);
@@ -137,6 +139,10 @@ export function fixture(
     unread: {
       ...base.unread,
       snapshot: (target) => {
+        if (target.kind === "channel") {
+          const explicit = read.get(target.channelId);
+          if (explicit) return explicit;
+        }
         if (!newer || target.kind !== "channel" || target.channelId === id)
           return unread;
         // Stable per channel, as external-store snapshots must be.
@@ -161,6 +167,7 @@ export function fixture(
     status: "ready",
     session,
     generation: 1,
+    viewer,
     scope,
   };
   const relay: RelayData = {
@@ -170,7 +177,10 @@ export function fixture(
     disconnect() {},
     async clearCache() {},
   };
+  const soloNavigation = enhance?.(relay);
   let attempt = 0;
+  let navigationStatus: import("../../features/navigation/controller").NavigationSnapshot["status"] =
+    "opened";
   const open = vi.fn(async (next: OpenTarget) => {
     target = next;
     attempt++;
@@ -182,6 +192,8 @@ export function fixture(
     open,
     subscribe,
     snapshot: () => ({
+      entry: { target },
+      status: navigationStatus,
       attempt: { id: String(attempt), signal: new AbortController().signal },
     }),
   } as unknown as Navigation;
@@ -202,6 +214,7 @@ export function fixture(
                 navigator={navigator}
                 target={target}
                 chatIcons={chatIcons}
+                soloNavigation={soloNavigation}
               >
                 <button type="button">Inbox</button>
               </PrimarySidebar>
@@ -222,6 +235,14 @@ export function fixture(
   const rendered = render(tree());
   return {
     session,
+    navigator,
+    navigationStatus(status: typeof navigationStatus) {
+      act(() => {
+        navigationStatus = status;
+        attempt++;
+        publish();
+      });
+    },
     navigate(next: OpenTarget) {
       target = next;
       rendered.rerender(tree());
@@ -260,6 +281,17 @@ export function fixture(
     threads(next: typeof threads) {
       act(() => {
         threads = next;
+        publish();
+      });
+    },
+    channelUnread(channelId: string, count: number) {
+      act(() => {
+        read.set(channelId, {
+          ...unread,
+          target: { kind: "channel", channelId },
+          observedCount: count,
+          attentionCount: 0,
+        });
         publish();
       });
     },

@@ -126,15 +126,17 @@ export function DraggableChannel({
   channelId,
   sectionKey,
   children,
+  disabled = false,
 }: {
   channelId: string;
   sectionKey: string;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   const { setNodeRef, listeners, isDragging } = useDraggable({
     id: channelId,
     data: { sectionKey },
-    disabled: !useContext(Writable),
+    disabled: !useContext(Writable) || disabled,
   });
   return (
     <div

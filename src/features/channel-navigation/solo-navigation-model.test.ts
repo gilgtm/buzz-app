@@ -43,6 +43,7 @@ it("keeps task trees in root placement and retains current/filter context withou
   expect([...result.context]).toEqual(["root"]);
   expect(result.outside).toBe("ordinary");
   expect(result.excluded).toBe(0);
+  expect([...result.matching]).toEqual(["worker"]);
   expect(
     soloForest(
       Array.from(forest.tasks.values()),

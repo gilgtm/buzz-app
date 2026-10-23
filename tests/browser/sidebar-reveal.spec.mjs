@@ -133,3 +133,31 @@ test("a user scroll before a delayed entry renders keeps that position for its d
   expect(await sidebar.evaluate((element) => element.scrollTop)).toBe(200);
   expect(errors).toEqual([]);
 });
+
+// Late metadata can move an already rendered selected row. Real scroll events
+// distinguish the scroll owner's reveal from a user's movement in both engines.
+test("late Solo placement reveals the current row once until the user scrolls", async ({
+  page,
+}) => {
+  await page.goto(url);
+  const sidebar = page.getByRole("navigation", {
+    name: "Sidebar",
+    exact: true,
+  });
+  await update(page, { mounted: true, at: "row:0" });
+  await expect(sidebar.locator('[data-row="0"]')).toBeInViewport({ ratio: 1 });
+  const place = () => page.evaluate(() => window.sidebar.place(0));
+  await place();
+  await expect(sidebar.locator('[data-row="0"]')).toBeInViewport({ ratio: 1 });
+  await settle(page);
+  await sidebar.hover();
+  await page.mouse.wheel(0, -200);
+  await expect
+    .poll(() => sidebar.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await settle(page);
+  const before = await sidebar.evaluate((element) => element.scrollTop);
+  await place();
+  await settle(page);
+  expect(await sidebar.evaluate((element) => element.scrollTop)).toBe(before);
+});

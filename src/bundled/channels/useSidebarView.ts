@@ -1,6 +1,12 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { readView, subscribeView, writeView } from "../../shared/view-state";
 
+/** A late Solo projection moved the current row. Reuse the scroll owner's
+ * existing reveal and user-scroll fence, rather than scrolling from the row. */
+export function requestSidebarPlacementReveal(element: HTMLElement) {
+  element.dispatchEvent(new Event("buzz:sidebar-placement", { bubbles: true }));
+}
+
 type SidebarView = {
   collapsed: string[];
   scrollTop: number;
@@ -115,6 +121,7 @@ export function useSidebarView(
 
   // The offset this hook last scrolled to, until its scroll event arrives.
   const moved = useRef<number | undefined>(undefined);
+  const userScrolled = useRef(false);
 
   // Once the user moves the viewport, they own it even if they return to the
   // top. A scroll event at the offset this hook set is its own restoration or
@@ -126,6 +133,7 @@ export function useSidebarView(
       const own = moved.current === viewport.scrollTop;
       moved.current = undefined;
       if (own) return;
+      userScrolled.current = true;
       pending.current = false;
       // The user's position now belongs to the destination they navigated
       // to, so returning there keeps it instead of revealing again.
@@ -150,11 +158,24 @@ export function useSidebarView(
   // resolves to a conversation) stays pending. It owns the saved position
   // only if the user scrolls there.
   useLayoutEffect(() => {
+    userScrolled.current = false;
     reveal.current = location === restored.current ? undefined : location;
   }, [location]);
   // The entry can render after navigation (roster startup, a new DM), so
   // retry after each commit until it exists. Runs after the restore above.
   const attempt = useRef(() => {});
+  useLayoutEffect(() => {
+    const viewport = list.current;
+    if (!viewport) return;
+    const placement = () => {
+      if (userScrolled.current || !location) return;
+      reveal.current = location;
+      attempt.current();
+    };
+    viewport.addEventListener("buzz:sidebar-placement", placement);
+    return () =>
+      viewport.removeEventListener("buzz:sidebar-placement", placement);
+  }, [location]);
   useLayoutEffect(() => {
     attempt.current = () => {
       if (!ready || !reveal.current || !list.current) return;

@@ -5,6 +5,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { useSoloNavigation } from "../../features/channel-navigation/solo-navigation-react";
+import {
+  soloMovePolicy,
+  prepareSoloMove,
+} from "../../features/channel-navigation/solo-navigation";
 import { conversionLabel } from "../../features/solo/conversion";
 import {
   soloShareAttempt,
@@ -20,6 +25,7 @@ import { Button } from "../../shared/design-system/ui/Button";
 import { Dialog } from "../../shared/design-system/ui/Dialog";
 import { Input } from "../../shared/design-system/ui/Input";
 import {
+  MenuNote,
   MenuIcon,
   MenuItem,
   MenuSeparator,
@@ -51,6 +57,7 @@ export function SoloChatMenuItems({
   onSettings,
   onLifecycle,
   onReadResult,
+  onMoveBlocked,
 }: {
   session: RelaySession;
   channel: ChannelSummary;
@@ -64,8 +71,19 @@ export function SoloChatMenuItems({
   onLifecycle?: ((action: ChannelLifecycleAction) => void) | undefined;
   /** The menu closes at once; its host reports a failed read change. */
   onReadResult(error?: string): void;
+  onMoveBlocked(message: string): void;
 }) {
   const handoff = useChannelNavigation();
+  useSoloNavigation(session);
+  const follows = soloMovePolicy(session, channel.id);
+  const move = (action: () => void) => {
+    const blocked = prepareSoloMove(session, channel.id);
+    if (blocked) {
+      onMoveBlocked(blocked);
+      return;
+    }
+    action();
+  };
   const shareAttempts = useSoloShareAttempts(session);
   const preferences = session.soloPreferences;
   const snapshot = useSyncExternalStore(
@@ -114,7 +132,10 @@ export function SoloChatMenuItems({
         </MenuIcon>
         Edit…
       </MenuItem>
-      {active && (
+      {active && follows && (
+        <MenuNote>Workspace follows {follows.title}</MenuNote>
+      )}
+      {active && !follows && (
         <MenuSubmenu>
           <MenuSubmenuTrigger disabled={!preferences.writable}>
             <MenuIcon>
@@ -123,13 +144,20 @@ export function SoloChatMenuItems({
             Move to
           </MenuSubmenuTrigger>
           <MenuSubmenuPopup aria-label="Workspace">
-            {grouped && <MenuItem onClick={() => onMove()}>Chats</MenuItem>}
+            {grouped && (
+              <MenuItem onClick={() => move(() => onMove())}>Chats</MenuItem>
+            )}
             {groups.map((group) => (
-              <MenuItem key={group.id} onClick={() => onMove(group.id)}>
+              <MenuItem
+                key={group.id}
+                onClick={() => move(() => onMove(group.id))}
+              >
                 {group.name}
               </MenuItem>
             ))}
-            <MenuItem onClick={onNewWorkspace}>New workspace…</MenuItem>
+            <MenuItem onClick={() => move(onNewWorkspace)}>
+              New workspace…
+            </MenuItem>
           </MenuSubmenuPopup>
         </MenuSubmenu>
       )}

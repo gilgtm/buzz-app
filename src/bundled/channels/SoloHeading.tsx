@@ -5,6 +5,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { prepareSoloMove } from "../../features/channel-navigation/solo-navigation";
 import { canEditLifetime } from "../../features/solo/Lifetime";
 import { SoloTitle } from "../../features/solo/SoloPresentation";
 import { WorkspaceSettings } from "../../features/solo/WorkspaceSettings";
@@ -66,6 +67,7 @@ export function SoloHeading({
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [copy, copyNotice] = useChatCopy();
   const [readError, setReadError] = useState<string>();
+  const [moveNotice, setMoveNotice] = useState<string>();
   // The sidebar may be hidden, so a move started here reports its own failure.
   const preferences = session.soloPreferences;
   const placement = useSyncExternalStore(
@@ -106,6 +108,11 @@ export function SoloHeading({
                     onShare={() => setSharing({ visit: signal })}
                     onConvert={() => onConvert(actionsTrigger.current)}
                     onMove={(projectId) => {
+                      const blocked = prepareSoloMove(session, channel.id);
+                      if (blocked) {
+                        setMoveNotice(blocked);
+                        return;
+                      }
                       setMoving(true);
                       void preferences
                         .assign(channel.id, projectId)
@@ -123,6 +130,7 @@ export function SoloHeading({
                       onLifecycle(action, actionsTrigger.current ?? undefined)
                     }
                     onReadResult={setReadError}
+                    onMoveBlocked={setMoveNotice}
                   />
                 </MenuPopup>
               </MenuRoot>
@@ -171,6 +179,12 @@ export function SoloHeading({
           close={() => setCreatingWorkspace(false)}
           create={(name) => {
             if (!preferences.writable) return false;
+            const blocked = prepareSoloMove(session, channel.id);
+            if (blocked) {
+              setMoveNotice(blocked);
+              setCreatingWorkspace(false);
+              return true;
+            }
             setMoving(true);
             void preferences
               .createAndAssign(channel.id, { id: crypto.randomUUID(), name })
@@ -201,6 +215,13 @@ export function SoloHeading({
             Retry move
           </Button>
         </ToastNotice>
+      )}
+      {moveNotice && (
+        <ToastNotice
+          title="Workspace follows task"
+          description={moveNotice}
+          onDismiss={() => setMoveNotice(undefined)}
+        />
       )}
       {readError && (
         <ToastNotice

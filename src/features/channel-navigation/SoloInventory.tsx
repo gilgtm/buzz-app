@@ -35,13 +35,26 @@ import {
   MenuTrigger,
   MenuPopup,
   MenuItem,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuNote,
 } from "../../shared/design-system/ui/Menu";
 import { useSoloNavigation } from "./solo-navigation-react";
 import { soloNavigationFor } from "./solo-navigation";
-import { SOLO_STATUS_LABELS } from "./solo-navigation-model";
+import {
+  SOLO_VIEW_DEFAULTS,
+  SOLO_STATUS_LABELS,
+} from "./solo-navigation-model";
 import type { SoloTaskRow } from "./solo-navigation-contract";
 import creationStyles from "./SoloInventory.module.css";
-import { PlusIcon, ChatCircleIcon } from "../../shared/design-system/icons";
+import {
+  PlusIcon,
+  ChatCircleIcon,
+  SlidersHorizontalIcon,
+} from "../../shared/design-system/icons";
 import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import type { ContributionReader } from "../conversation/contracts";
 import type { ChatIcon } from "../conversation/service";
@@ -81,6 +94,8 @@ export function SoloInventory({
     session.soloPreferences.snapshot,
   );
   const [menuOpen, setMenuOpen] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [excluded, setExcluded] = useState(0);
   const [creatingProject, setCreatingProject] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const recoveryShown = useRecoveryShown(session.recovery);
@@ -171,12 +186,102 @@ export function SoloInventory({
     >
       <div
         className={creationStyles.header}
-        data-actions-visible={menuOpen || undefined}
+        data-actions-visible={
+          menuOpen || viewMenuOpen || !!enhanced || undefined
+        }
       >
         <InlineHeader
           title={<span className="text-standard">{title}</span>}
           actions={
             <div className={creationStyles.actions}>
+              {enhanced && (
+                <MenuRoot open={viewMenuOpen} onOpenChange={setViewMenuOpen}>
+                  <MenuTrigger
+                    render={
+                      <IconButton
+                        size="compact"
+                        data-solo-collection-control=""
+                        aria-label="Group and sort"
+                        title="Group and sort"
+                        icon={<SlidersHorizontalIcon size={15} />}
+                      />
+                    }
+                  />
+                  <MenuPopup align="end" aria-label="Group and sort">
+                    {(
+                      [
+                        [
+                          "group",
+                          "Group by",
+                          [
+                            ["workspace", "Workspace"],
+                            ["status", "Status"],
+                            ["none", "None"],
+                          ],
+                        ],
+                        [
+                          "sort",
+                          "Sort by",
+                          [
+                            ["recent", "Recent activity"],
+                            ["name", "Name"],
+                          ],
+                        ],
+                        [
+                          "show",
+                          "Show",
+                          [
+                            ["all-chats", "All chats"],
+                            ["active-tasks", "Active tasks"],
+                            ["all-tasks", "All tasks"],
+                          ],
+                        ],
+                      ] as const
+                    ).map(([key, label, choices]) => (
+                      <MenuGroup key={key}>
+                        <MenuGroupLabel>{label}</MenuGroupLabel>
+                        <MenuRadioGroup
+                          value={enhanced.options[key]}
+                          onValueChange={(value) =>
+                            soloNavigationFor(session)?.setOptions({
+                              ...enhanced.options,
+                              [key]: value,
+                            })
+                          }
+                        >
+                          {choices.map(([value, name]) => (
+                            <MenuRadioItem key={value} value={value}>
+                              {name}
+                            </MenuRadioItem>
+                          ))}
+                        </MenuRadioGroup>
+                      </MenuGroup>
+                    ))}
+                    <MenuSeparator />
+                    <MenuNote>{excluded} chats hidden by filter</MenuNote>
+                    <MenuItem
+                      onClick={() =>
+                        soloNavigationFor(session)?.setOptions({
+                          ...enhanced.options,
+                          show: "all-chats",
+                        })
+                      }
+                    >
+                      Show all chats
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() =>
+                        soloNavigationFor(session)?.setOptions(
+                          SOLO_VIEW_DEFAULTS,
+                        )
+                      }
+                    >
+                      Reset view
+                    </MenuItem>
+                  </MenuPopup>
+                </MenuRoot>
+              )}
+
               <MenuRoot open={menuOpen} onOpenChange={setMenuOpen}>
                 <MenuTrigger
                   render={
@@ -201,7 +306,14 @@ export function SoloInventory({
                   <MenuItem
                     disabled={!session.soloPreferences.sectionCreationWritable}
                     onClick={() => {
-                      if (current()) setCreatingProject(true);
+                      if (current()) {
+                        if (enhanced)
+                          soloNavigationFor(session)?.setOptions({
+                            ...enhanced.options,
+                            group: "workspace",
+                          });
+                        setCreatingProject(true);
+                      }
                     }}
                   >
                     New workspace…
@@ -212,6 +324,11 @@ export function SoloInventory({
           }
         />
       </div>
+      {enhanced?.notice && (
+        <p role="status" className={styles.listMessage}>
+          {enhanced.notice}
+        </p>
+      )}
       {empty && (
         <NavigationItem
           variant="row"
@@ -234,6 +351,9 @@ export function SoloInventory({
       <SoloWorkspaces
         navigator={navigator}
         enhanced={enhanced}
+        currentId={selected}
+        activity={{ unread: unreadChats, working: workingChannels }}
+        onFilteredCount={setExcluded}
         draft={
           draft
             ? {
@@ -279,7 +399,7 @@ export function SoloInventory({
             unreadChats.has(item.id),
         }))}
         onNew={newChat}
-        renderChat={(item, rename) => (
+        renderChat={(item, rename, annotation) => (
           <SoloConversationRow
             key={item.id}
             session={session}
@@ -291,6 +411,7 @@ export function SoloInventory({
             )}
             title={item.title}
             task={enhanced?.forest.tasks.get(item.id)}
+            annotation={annotation}
             selected={selected === item.id}
             working={workingChannels.has(item.id)}
             Icon={ChatIcon}
@@ -325,6 +446,7 @@ function SoloConversationRow({
   selected,
   working,
   task,
+  annotation,
   Icon,
   onSelect,
   onRename,
@@ -341,6 +463,7 @@ function SoloConversationRow({
   selected: boolean;
   working: boolean;
   task?: SoloTaskRow | undefined;
+  annotation?: string | undefined;
   Icon?: ChatIcon["component"] | undefined;
   onSelect: () => void;
   onRename: (() => boolean) | undefined;
@@ -415,7 +538,9 @@ function SoloConversationRow({
             )
           }
           label={
-            <span className={task ? styles.taskLabel : styles.chatRow}>
+            <span
+              className={task || annotation ? styles.taskLabel : styles.chatRow}
+            >
               <UnreadBadge
                 session={session}
                 channelId={id}
@@ -427,6 +552,9 @@ function SoloConversationRow({
                   {task.subtitle && `${task.subtitle} · `}
                   {SOLO_STATUS_LABELS[task.status]}
                 </span>
+              )}
+              {annotation && (
+                <span className="text-caption text-subtle">{annotation}</span>
               )}
               {task &&
                 selected &&
