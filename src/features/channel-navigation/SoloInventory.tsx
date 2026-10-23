@@ -36,6 +36,10 @@ import {
   MenuPopup,
   MenuItem,
 } from "../../shared/design-system/ui/Menu";
+import { useSoloNavigation } from "./solo-navigation-react";
+import { soloNavigationFor } from "./solo-navigation";
+import { SOLO_STATUS_LABELS } from "./solo-navigation-model";
+import type { SoloTaskRow } from "./solo-navigation-contract";
 import creationStyles from "./SoloInventory.module.css";
 import { PlusIcon, ChatCircleIcon } from "../../shared/design-system/icons";
 import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
@@ -67,6 +71,8 @@ export function SoloInventory({
   chatIcons?: ContributionReader<ChatIcon> | undefined;
 }) {
   const list = useChannelList(session.channels);
+  const enhanced = useSoloNavigation(session);
+  const title = enhanced?.enhancement.title ?? "Solo";
   const pendingClick = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -159,13 +165,16 @@ export function SoloInventory({
     void navigator.open(soloDraftTarget(scope, project ? { project } : {}));
   };
   return (
-    <nav className={styles.sidebarContents} aria-label="Solo conversations">
+    <nav
+      className={styles.sidebarContents}
+      aria-label={`${title} conversations`}
+    >
       <div
         className={creationStyles.header}
         data-actions-visible={menuOpen || undefined}
       >
         <InlineHeader
-          title={<span className="text-standard">Solo</span>}
+          title={<span className="text-standard">{title}</span>}
           actions={
             <div className={creationStyles.actions}>
               <MenuRoot open={menuOpen} onOpenChange={setMenuOpen}>
@@ -182,6 +191,13 @@ export function SoloInventory({
                 />
                 <MenuPopup align="end">
                   <MenuItem onClick={() => newChat()}>New chat</MenuItem>
+                  {enhanced?.enhancement.create && (
+                    <MenuItem
+                      onClick={() => void soloNavigationFor(session)?.create()}
+                    >
+                      {enhanced.enhancement.create.label}
+                    </MenuItem>
+                  )}
                   <MenuItem
                     disabled={!session.soloPreferences.sectionCreationWritable}
                     onClick={() => {
@@ -217,6 +233,7 @@ export function SoloInventory({
       )}
       <SoloWorkspaces
         navigator={navigator}
+        enhanced={enhanced}
         draft={
           draft
             ? {
@@ -273,6 +290,7 @@ export function SoloInventory({
               (conversation) => conversation.id === item.id,
             )}
             title={item.title}
+            task={enhanced?.forest.tasks.get(item.id)}
             selected={selected === item.id}
             working={workingChannels.has(item.id)}
             Icon={ChatIcon}
@@ -306,6 +324,7 @@ function SoloConversationRow({
   title,
   selected,
   working,
+  task,
   Icon,
   onSelect,
   onRename,
@@ -321,6 +340,7 @@ function SoloConversationRow({
   title: string;
   selected: boolean;
   working: boolean;
+  task?: SoloTaskRow | undefined;
   Icon?: ChatIcon["component"] | undefined;
   onSelect: () => void;
   onRename: (() => boolean) | undefined;
@@ -394,13 +414,26 @@ function SoloConversationRow({
             )
           }
           label={
-            <span className={styles.chatRow}>
+            <span className={task ? styles.taskLabel : styles.chatRow}>
               <UnreadBadge
                 session={session}
                 channelId={id}
                 label={title}
                 labelUnread="all"
               />
+              {task && (
+                <span className="text-caption text-subtle">
+                  {task.subtitle && `${task.subtitle} · `}
+                  {SOLO_STATUS_LABELS[task.status]}
+                </span>
+              )}
+              {task &&
+                selected &&
+                task.details?.map((detail) => (
+                  <span key={detail.label} className="text-caption text-subtle">
+                    {detail.label}: {detail.value}
+                  </span>
+                ))}
             </span>
           }
           trailing={

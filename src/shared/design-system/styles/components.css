@@ -1181,6 +1181,22 @@
      Base UI Button's native button behavior. It does not compose Buzz Button:
      a navigation destination is not an ordinary action button, and sharing the
      styling made the generic ghost hover compete with navigation's own states. */
+  .navigation-card {
+    border-radius: var(--radius-row);
+    color: var(--text-standard);
+    --interaction-row-hover: transparent;
+    --interaction-selected: transparent;
+    --interaction-pressed: transparent;
+  }
+  .navigation-card:is(:hover, :focus-within, [data-context-menu-present]):not(
+    :has([aria-current="page"])
+  ) {
+    background: var(--affordance-panel-hover);
+  }
+  .navigation-card:has([aria-current="page"]) {
+    background: var(--surface-sidebar-selected);
+    --text-subtle: var(--text-row-selected-subtle);
+  }
   .navigation-item {
     display: inline-flex;
     width: 100%;

@@ -69,6 +69,14 @@ leading icon/avatar slot, primary label, supporting text, and trailing metadata
 or actions. Keep an independent row action outside the row's primary click target.
 Do not make decorative metadata look like another control.
 
+Solo task cards use `NavigationCard` around a `NavigationItem` and its independent
+Workers disclosure. The card owns one hover and selected surface; the primary
+button owns focus and `aria-current`. Workers is a sibling button inside that
+surface. Compact cards omit Workers. Only the current task shows detail fields;
+ancestor cards retain context without selected styling. The collection's Group
+and sort Menu sits beside + in the compact list's `InlineHeader` action slot.
+It controls this list, remains reachable when empty, and uses Menu radio items.
+
 Use `FullPageSurface` for one page surface, or the existing workspace owner for
 multiple regions. FullPageSurface supplies the surface, not padding or scrolling.
 Give each independently scrolling region one intentional scrollport; fix toolbars

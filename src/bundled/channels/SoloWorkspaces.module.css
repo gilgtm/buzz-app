@@ -364,3 +364,18 @@
     display: none;
   }
 }
+
+/* NavigationCard owns the task surface, including its sibling disclosure. */
+.organizedRow[data-navigation-card]::before {
+  display: none;
+}
+.taskLabel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--space-half);
+}
+.taskLabel > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

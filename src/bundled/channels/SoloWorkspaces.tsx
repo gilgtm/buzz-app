@@ -49,6 +49,8 @@ import {
   SoloChatMenuItems,
   useChatCopy,
 } from "./SoloChatMenu";
+import type { SoloNavigationSnapshot } from "../../features/channel-navigation/solo-navigation";
+import { NavigationCard } from "../../shared/design-system/ui/NavigationItem";
 import styles from "./SoloWorkspaces.module.css";
 import channelStyles from "./Channels.module.css";
 
@@ -75,7 +77,9 @@ export function SoloWorkspaces({
   onConverted,
   visit,
   draft,
+  enhanced,
 }: {
+  enhanced?: SoloNavigationSnapshot | undefined;
   draft?: { projectId?: string | undefined; content: ReactNode } | undefined;
   onConverted?: ((id: string) => void) | undefined;
   visit?: AbortSignal;
@@ -515,6 +519,7 @@ export function SoloWorkspaces({
                       <ChatSharedMark session={session} channel={channel} />
                     }
                     className={styles.organizedRow}
+                    card={enhanced?.forest.tasks.has(item.id)}
                     content={
                       channel && (
                         <SoloChatMenuItems
@@ -764,7 +769,9 @@ function ChatActionsMenu({
   indicator,
   enabled = true,
   trailing,
+  card,
 }: {
+  card?: boolean | undefined;
   id: string;
   title: string;
   className: string | undefined;
@@ -796,7 +803,13 @@ function ChatActionsMenu({
       }}
     >
       <ContextMenuTrigger
-        render={<div className={className} data-solo-menu-id={id} />}
+        render={
+          card ? (
+            <NavigationCard className={className} data-solo-menu-id={id} />
+          ) : (
+            <div className={className} data-solo-menu-id={id} />
+          )
+        }
         onKeyDown={(event) => {
           if (
             event.key === "ContextMenu" ||

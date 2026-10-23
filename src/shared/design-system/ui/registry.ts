@@ -769,6 +769,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
       "selected",
       "highlighted",
       "inside SidebarNavigation",
+      "NavigationCard with sibling disclosure",
     ],
     status: "proposed",
     collection: "components",

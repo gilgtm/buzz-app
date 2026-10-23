@@ -30,6 +30,8 @@ import type { ChannelList } from "../../features/relay/contracts";
 import type { ContributionReader } from "../../features/conversation/contracts";
 import type { ChatIcon } from "../../features/conversation/service";
 
+import type { SoloNavigationReader } from "../../features/channel-navigation/solo-navigation";
+
 const noSubscription = () => () => {};
 
 type Filter = "all" | "solo" | "team";
@@ -44,6 +46,7 @@ type Props = {
   navigator: Navigation;
   agents?: Agents | undefined;
   chatIcons?: ContributionReader<ChatIcon> | undefined;
+  soloNavigation?: SoloNavigationReader | undefined;
   target: OpenTarget;
   children: ReactNode;
 };
@@ -70,6 +73,14 @@ function ScopedSidebar({
   scope: string;
   connection: ReturnType<typeof useRelayConnection>;
 }) {
+  const enhancement = useSyncExternalStore(
+    props.soloNavigation?.subscribe ?? noSubscription,
+    () => props.soloNavigation?.snapshot(),
+  );
+  const soloTitle = enhancement?.enhancement.title ?? "Solo";
+  const visibleFilters = enhancement
+    ? [filters[0], filters[2], { ...filters[1], label: soloTitle }]
+    : filters;
   const attempt = useSyncExternalStore(
     props.navigator.subscribe,
     () => props.navigator.snapshot().attempt.id,
@@ -148,7 +159,7 @@ function ScopedSidebar({
             label="Navigation scope"
             variant="segmented"
             value={filter}
-            items={filters}
+            items={visibleFilters}
             onValueChange={setFilter}
           />
         </div>
@@ -207,7 +218,7 @@ function ScopedSidebar({
                 {before}
                 <SidebarUnread listRef={sidebar.list} dmPreviews={dmPreviews}>
                   <section
-                    aria-label="Solo"
+                    aria-label={soloTitle}
                     className={styles.sidebarGroup}
                     hidden={filter === "team"}
                   >

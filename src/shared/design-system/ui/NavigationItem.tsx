@@ -1,6 +1,19 @@
 import { Button as BaseButton } from "@base-ui/react/button";
 import type { ComponentProps, ReactNode } from "react";
 
+/** One navigation surface for a primary row and independent sibling controls.
+ * The primary NavigationItem still owns focus and aria-current. */
+export function NavigationCard({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      {...props}
+      data-buzz-ui=""
+      data-navigation-card=""
+      className={`navigation-card ${className ?? ""}`}
+    />
+  );
+}
+
 export function NavigationItem({
   label,
   icon,
