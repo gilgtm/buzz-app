@@ -380,8 +380,12 @@ export function SoloWorkspaces({
       if (successful) {
         const path =
           task && enhanced ? soloAncestors(enhanced.forest, task) : [];
-        next =
-          task === previous.task ? new Set([...next, ...path]) : new Set(path);
+        const sameBranch =
+          task &&
+          previous.task &&
+          enhanced?.forest.roots.get(task) ===
+            enhanced?.forest.roots.get(previous.task);
+        next = sameBranch ? new Set([...next, ...path]) : new Set(path);
       } else if (pathKey !== previous.path)
         for (const id of currentPath) next.add(id);
       return next.size === current.size &&
@@ -391,7 +395,7 @@ export function SoloWorkspaces({
     });
     accepted.current = {
       attempt: successful ? navigation?.attempt.id : previous.attempt,
-      task: successful ? task : previous.task,
+      task: navigation?.status === "opened" ? task : previous.task,
       path: pathKey,
       owner,
     };
@@ -561,7 +565,6 @@ export function SoloWorkspaces({
   const renderItem = (
     item: ChatListItem,
     project: { id: string; name: string },
-    depth = 0,
     isVisible = true,
   ): ReactNode => {
     const children = projection?.children.get(item.id) ?? [];
@@ -642,7 +645,6 @@ export function SoloWorkspaces({
             <div
               id={`solo-workers-${item.id}`}
               hidden={!childrenOpen && !containsRename}
-              className={depth < 3 ? styles.workerChildren : undefined}
             >
               {children.map((id) => {
                 const child = byId.get(id);
@@ -650,7 +652,6 @@ export function SoloWorkspaces({
                   ? renderItem(
                       child,
                       project,
-                      depth + 1,
                       isVisible && (childrenOpen || containsRename),
                     )
                   : null;
@@ -774,7 +775,6 @@ export function SoloWorkspaces({
                 ? "Open chat — outside filter"
                 : "",
               projection?.context.has(item.id) ? "Context" : "",
-              currentPath.includes(item.id) ? "Contains current task" : "",
               !cardExpanded && !enhanced?.forest.tasks.has(item.id)
                 ? hiddenActivity
                 : "",

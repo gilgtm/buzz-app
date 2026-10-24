@@ -1200,7 +1200,7 @@
     min-width: 0;
   }
   .navigation-card-body {
-    padding: 0 var(--space-1) var(--space-1);
+    padding-block-end: var(--space-1);
   }
   .navigation-card-body:has(> [hidden]:only-child) {
     display: none;
@@ -1243,6 +1243,10 @@
     --interaction-row-metadata: var(--text-metadata);
     border: 1px solid transparent;
     border-radius: var(--radius-chip);
+  }
+  /* Contained destinations align at every depth rather than adding tree insets. */
+  .navigation-card-body .navigation-card[data-tone="tonal"] {
+    border-inline-width: 0;
   }
   .navigation-card[data-tone="tonal"]:has(
     > .navigation-card-row [aria-current="page"]

@@ -512,8 +512,10 @@ function SoloConversationRow({
   );
   // Describe only by a mark that renders, using the same Shared evidence.
   const shared = useSharedWithPeople(session, channel);
+  const expandedContent = !nested || selected;
+  const compactWorker = !!task && !expandedContent;
   const preview =
-    task && !selected && channel?.preview
+    task && expandedContent && channel?.preview
       ? plainText(channel.preview)
       : undefined;
   const StatusIcon = taskStatusIcons[task?.status ?? "archived"];
@@ -535,6 +537,7 @@ function SoloConversationRow({
           data-solo-channel-id={id}
           aria-current={selected ? "page" : undefined}
           aria-describedby={shared ? soloSharedMarkId(id) : undefined}
+          aria-description={compactWorker ? annotation : undefined}
           onPointerDown={(event) => {
             pointer.current = event.pointerType;
           }}
@@ -585,6 +588,7 @@ function SoloConversationRow({
                 <span
                   className={styles.taskHeading}
                   data-worker={nested || undefined}
+                  data-compact={compactWorker || undefined}
                 >
                   <span className={`${styles.taskTitle} text-label-sm`}>
                     <UnreadBadge
@@ -602,7 +606,9 @@ function SoloConversationRow({
                     title={SOLO_STATUS_LABELS[task.status]}
                   >
                     <StatusIcon size={14} />
-                    {nested && SOLO_STATUS_LABELS[task.status]}
+                    {nested &&
+                      !compactWorker &&
+                      SOLO_STATUS_LABELS[task.status]}
                   </span>
                 </span>
               ) : (
@@ -613,7 +619,7 @@ function SoloConversationRow({
                   labelUnread="all"
                 />
               )}
-              {task?.subtitle && (!nested || selected) && (
+              {task?.subtitle && expandedContent && (
                 <span className="text-caption text-subtle">
                   {task.subtitle}
                 </span>
@@ -626,11 +632,11 @@ function SoloConversationRow({
                   {preview}
                 </span>
               )}
-              {annotation && (
+              {annotation && !compactWorker && (
                 <span className="text-caption text-subtle">{annotation}</span>
               )}
               {task &&
-                selected &&
+                expandedContent &&
                 task.details?.map((detail) => (
                   <span key={detail.label} className={styles.taskDetail}>
                     <span className="text-caption text-metadata">

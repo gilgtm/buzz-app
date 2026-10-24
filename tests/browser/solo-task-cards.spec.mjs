@@ -153,8 +153,27 @@ test("contained task cards preserve row ownership, previews and separate disclos
   await expect(child).toBeHidden();
   await workers.press("Enter");
   await expect(child).toBeVisible();
+  const parentContent = await parent.textContent();
+  const parentHeight = (await parent.boundingBox()).height;
   await parent.click();
   await expect(parent).toHaveAttribute("aria-current", "page");
+  await expect(parent).toHaveText(parentContent);
+  expect((await parent.boundingBox()).height).toBe(parentHeight);
+  await expect(parent).not.toContainText("Contains current task");
+  // Compact workers keep one visible line even at enlarged text.
+  await expect(child.locator("[data-solo-message-preview]")).toHaveCount(0);
+  await expect(
+    child.getByRole("img", { name: "Waiting", exact: true }),
+  ).toBeVisible();
+  await expect(child).not.toContainText("Waiting");
+  expect(
+    await child.evaluate((row) => {
+      const heading = row.querySelector("[data-worker]");
+      const title = heading.firstElementChild.getBoundingClientRect();
+      const status = heading.lastElementChild.getBoundingClientRect();
+      return status.top < title.bottom && status.bottom > title.top;
+    }),
+  ).toBe(true);
   await expect(child).not.toHaveAttribute("aria-current");
   await expect(workers).toHaveAttribute("aria-expanded", "true");
   await expect(parent).toContainText("task/sidebar");
@@ -207,5 +226,19 @@ test("contained task cards preserve row ownership, previews and separate disclos
     await expect(mark).toBeVisible();
     await expect(mark.locator("svg")).toBeVisible();
   }
+  await page.goto(
+    "/tests/browser/solo-task-cards.html?nested=1&theme=light&width=260",
+  );
+  const nestedRows = page
+    .locator("[data-solo-channel-id]")
+    .filter({ has: page.locator("[data-worker]") });
+  await expect(nestedRows).toHaveCount(4);
+  const bounds = await nestedRows.evaluateAll((rows) =>
+    rows.map((row) => {
+      const { x, width } = row.getBoundingClientRect();
+      return { x, width };
+    }),
+  );
+  expect(bounds).toEqual(Array(4).fill(bounds[0]));
   expect(errors).toEqual([]);
 });

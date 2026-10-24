@@ -150,20 +150,29 @@ it("shows one enhanced Solo inventory, keeps ordinary recovery controls, and res
   ).not.toHaveTextContent("Running");
 });
 
-it("keeps Workers inside expanded cards, respects manual close, and reveals only successful/reparented paths", async () => {
+it("keeps branch expansion during parent/worker selection, respects explicit close, and resets on outside conversations", async () => {
   const user = userEvent.setup();
-  const f = await enhancedFixture([parent, child]);
+  const f = await enhancedFixture([parent, child], 1);
   // The initially current child retains its parent context, without selecting it.
   const row = screen.getByRole("button", { name: /^Planning/ });
   expect(row).not.toHaveAttribute("aria-current");
-  expect(row).toHaveTextContent("Contains current task");
-  const workers = screen.getByRole("button", { name: /1 worker:/i });
+  expect(row).not.toHaveTextContent("Contains current task");
+  expect(row).toHaveTextContent("task/sidebar");
+  let workers = screen.getByRole("button", { name: /1 worker:/i });
   expect(workers.closest("[data-navigation-card]")).toContainElement(row);
   expect(workers.closest("[data-navigation-card]")).toContainElement(
     screen.getByRole("button", { name: /^Other/ }),
   );
   expect(workers.closest("button")).toBe(workers);
   expect(workers).toHaveAttribute("aria-expanded", "true");
+  await user.click(row);
+  await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
+  expect(workers).toHaveAttribute("aria-expanded", "true");
+  const initiallyCurrentWorker = screen.getByRole("button", { name: /^Other/ });
+  await user.click(initiallyCurrentWorker);
+  await waitFor(() =>
+    expect(initiallyCurrentWorker).toHaveAttribute("aria-current", "page"),
+  );
   await user.click(workers);
   expect(
     screen.queryByRole("button", { name: /^Other/ }),
@@ -175,11 +184,38 @@ it("keeps Workers inside expanded cards, respects manual close, and reveals only
   f.navigationStatus("opened");
   expect(workers).toHaveAttribute("aria-expanded", "true");
   await user.click(row);
+  await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
   expect(screen.getByText("task/sidebar")).toBeInTheDocument();
+  expect(workers).toHaveAttribute("aria-expanded", "true");
+  const selectedWorker = screen.getByRole("button", { name: /^Other/ });
+  await user.click(selectedWorker);
+  await waitFor(() =>
+    expect(selectedWorker).toHaveAttribute("aria-current", "page"),
+  );
+  expect(workers).toHaveAttribute("aria-expanded", "true");
+  await user.click(workers);
+  await user.click(row);
+  await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
   expect(workers).toHaveAttribute("aria-expanded", "false");
   await user.click(workers);
-  await user.click(screen.getByRole("button", { name: /^Other/ }));
-  expect(workers).toHaveAttribute("aria-expanded", "true");
+  const ordinary = screen.getByRole("button", { name: "Newer 0" });
+  await user.click(ordinary);
+  await waitFor(() => expect(ordinary).toHaveAttribute("aria-current", "page"));
+  await user.click(row);
+  await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
+  workers = screen.getByRole("button", { name: /1 worker:/i });
+  expect(workers).toHaveAttribute("aria-expanded", "false");
+  await user.click(workers);
+  f.update([parent, child, { channelId: "newer-0", status: "done" }]);
+  const otherRoot = screen.getByRole("button", { name: /^Newer 0/ });
+  await user.click(otherRoot);
+  await waitFor(() =>
+    expect(otherRoot).toHaveAttribute("aria-current", "page"),
+  );
+  await user.click(row);
+  await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
+  workers = screen.getByRole("button", { name: /1 worker:/i });
+  expect(workers).toHaveAttribute("aria-expanded", "false");
   await act(async () => {
     await f.navigator.open(soloDraftTarget(scope));
   });
@@ -363,9 +399,19 @@ it("retains unread workers while compact cards show bounded reactive message pre
   ).not.toBeInTheDocument();
   f.channelPreview(id, "A current reply");
   await user.click(root());
+  expect(root()).toHaveTextContent("A current reply");
+  expect(root()).toHaveTextContent("task/sidebar");
+  await user.click(screen.getByRole("button", { name: /1 worker:/i }));
+  const worker = screen.getByRole("button", { name: /^Other/ });
+  expect(worker.querySelector("[data-solo-message-preview]")).toBeNull();
   expect(
-    root().querySelector("[data-solo-message-preview]"),
-  ).not.toBeInTheDocument();
+    worker.querySelector('[role="img"][aria-label="Waiting"]'),
+  ).not.toBeNull();
+  expect(worker).not.toHaveTextContent("Waiting");
+  await user.click(worker);
+  expect(root()).toHaveTextContent("A current reply");
+  expect(root()).toHaveTextContent("task/sidebar");
+  expect(worker).toHaveTextContent("Waiting");
   const disclosure = screen.getByRole("button", {
     name: /1 worker: 1 waiting, 1 unread/i,
   });
@@ -391,6 +437,7 @@ it("keeps a 0-of-1 disclosure target in the DOM and reveals the current path on 
   await act(async () => {
     await f.navigator.open(conversationTarget(scope, id));
   });
+  await user.click(screen.getByRole("button", { name: /1 worker:/i }));
   f.update([parent, { ...child, status: "archived" }]);
   act(() =>
     f.service?.setOptions({
@@ -560,7 +607,9 @@ it.each(["regroup", "filter"] as const)(
       await act(async () => {
         await f.navigator.open(conversationTarget(scope, id));
       });
-      await user.click(screen.getByRole("button", { name: /1 worker:/i }));
+      expect(
+        screen.getByRole("button", { name: /1 worker:/i }),
+      ).toHaveAttribute("aria-expanded", "true");
       act(() =>
         f.service?.setOptions({
           group: "workspace",

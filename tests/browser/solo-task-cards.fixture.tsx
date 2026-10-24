@@ -171,9 +171,16 @@ await ctx
             status: "running",
             details: [{ label: "Branch", value: "task/sidebar" }],
           },
-          ...workers.map((worker) => ({
+          ...workers.map((worker, index) => ({
             channelId: worker.id,
-            ...(statusRoots ? {} : { parentChannelId: parent }),
+            ...(statusRoots
+              ? {}
+              : {
+                  parentChannelId:
+                    params.has("nested") && index > 0
+                      ? workers[index - 1].id
+                      : parent,
+                }),
             primaryAgent: worker.agent,
             status:
               statusRoots && worker.status === "running"
@@ -188,18 +195,23 @@ await ctx
 
 function Fixture() {
   const [target, setTarget] = useState<OpenTarget>(
-    conversationTarget(scope, child),
+    conversationTarget(
+      scope,
+      params.has("nested") ? (workers.at(-1)?.id ?? child) : child,
+    ),
   );
+  const [attempt, setAttempt] = useState(0);
   const navigator = {
     open: async (next: OpenTarget) => {
       setTarget(next);
+      setAttempt((current) => current + 1);
       return { status: "opened" as const };
     },
     subscribe: () => () => {},
     snapshot: () => ({
       entry: { target },
       status: "opened",
-      attempt: { id: "fixture", signal: new AbortController().signal },
+      attempt: { id: String(attempt), signal: new AbortController().signal },
     }),
   } as unknown as Navigation;
   return (

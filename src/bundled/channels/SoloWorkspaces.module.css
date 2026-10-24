@@ -383,9 +383,6 @@
 .workerFooter {
   min-width: 0;
 }
-.workerChildren {
-  padding-inline-start: clamp(var(--space-1), 2vw, var(--space-3));
-}
 
 .organizedRow[data-navigation-card-row]
   :is([data-solo-row-action], [data-solo-shared], [data-channel-activity]) {
@@ -495,4 +492,8 @@
 
 .taskHeading[data-worker] .taskStatus {
   margin-inline-start: auto;
+}
+
+.taskHeading[data-worker][data-compact] {
+  flex-wrap: nowrap;
 }
