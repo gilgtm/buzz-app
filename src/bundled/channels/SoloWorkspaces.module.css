@@ -388,9 +388,6 @@
 .workerChildren {
   padding-inline-start: clamp(var(--space-1), 2vw, var(--space-3));
 }
-.workerFooter button[aria-expanded="false"] svg {
-  transform: rotate(-90deg);
-}
 
 .organizedRow[data-navigation-card]
   :is([data-solo-row-action], [data-solo-shared], [data-channel-activity]) {
@@ -419,24 +416,20 @@
   flex-shrink: 0;
   color: var(--text-metadata);
 }
-.taskStatusDot {
-  width: var(--space-2);
-  height: var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--text-metadata);
+.taskStatus[data-status="running"] svg,
+.taskStatus[data-status="waiting"] svg {
+  color: var(--text-warning);
 }
-.taskStatus[data-status="running"] .taskStatusDot {
-  background: var(--text-categorical-purple);
+.taskStatus[data-status="done"] svg {
+  color: var(--icon-status-complete);
 }
-.taskStatus[data-status="waiting"] .taskStatusDot {
-  background: var(--text-warning);
+.taskStatus[data-status="failed"] svg {
+  color: var(--text-danger);
 }
-.taskStatus[data-status="done"] .taskStatusDot {
-  background: var(--text-success);
+.workerFooter button[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
 }
-.taskStatus[data-status="failed"] .taskStatusDot {
-  background: var(--text-danger);
-}
+
 .taskDetail {
   display: flex;
   align-items: baseline;

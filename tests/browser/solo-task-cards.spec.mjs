@@ -113,5 +113,13 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
       return label.top >= box.top && label.bottom <= box.bottom;
     }),
   ).toBe(true);
+  await page.goto(
+    "/tests/browser/solo-task-cards.html?status-roots=1&theme=light&width=260",
+  );
+  for (const label of ["Running", "Waiting", "Done", "Failed", "Archived"]) {
+    const mark = page.getByRole("img", { name: label, exact: true });
+    await expect(mark).toBeVisible();
+    await expect(mark.locator("svg")).toBeVisible();
+  }
   expect(errors).toEqual([]);
 });

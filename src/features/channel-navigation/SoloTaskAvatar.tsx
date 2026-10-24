@@ -32,6 +32,7 @@ export function SoloTaskAvatar({
   return (
     <span
       className={styles.taskAvatar}
+      aria-hidden="true"
       title={agent ? name : "No primary agent assigned"}
     >
       <Avatar

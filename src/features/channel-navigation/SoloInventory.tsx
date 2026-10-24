@@ -55,12 +55,25 @@ import {
   PlusIcon,
   ChatCircleIcon,
   SlidersHorizontalIcon,
+  CircleNotchIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ArchiveIcon,
 } from "../../shared/design-system/icons";
 import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import type { ContributionReader } from "../conversation/contracts";
 import type { ChatIcon } from "../conversation/service";
 import channelStyles from "../../bundled/channels/Channels.module.css";
 import styles from "../../bundled/channels/SoloWorkspaces.module.css";
+
+const taskStatusIcons = {
+  running: CircleNotchIcon,
+  waiting: ClockIcon,
+  done: CheckCircleIcon,
+  failed: XCircleIcon,
+  archived: ArchiveIcon,
+};
 
 const noSubscription = () => () => {};
 const chatIcon = (
@@ -498,6 +511,7 @@ function SoloConversationRow({
   );
   // Describe only by a mark that renders, using the same Shared evidence.
   const shared = useSharedWithPeople(session, channel);
+  const StatusIcon = taskStatusIcons[task?.status ?? "archived"];
   return (
     <ChannelActivityPopover
       session={session}
@@ -582,7 +596,7 @@ function SoloConversationRow({
                     aria-label={SOLO_STATUS_LABELS[task.status]}
                     title={SOLO_STATUS_LABELS[task.status]}
                   >
-                    <span className={styles.taskStatusDot} aria-hidden="true" />
+                    <StatusIcon size={14} />
                     {nested && SOLO_STATUS_LABELS[task.status]}
                   </span>
                 </span>

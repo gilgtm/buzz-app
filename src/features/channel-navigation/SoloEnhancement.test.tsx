@@ -599,3 +599,29 @@ it("renders saved worker identity and refreshed status summaries", async () => {
     row().querySelector('[title="No primary agent assigned"]'),
   ).toBeInTheDocument();
 });
+
+it("distinguishes every root task status by shape without relying on color", async () => {
+  const statuses = [
+    "running",
+    "waiting",
+    "done",
+    "failed",
+    "archived",
+  ] as const;
+  await enhancedFixture(
+    statuses.map((status, index) => ({
+      channelId: index === 0 ? id : index === 1 ? other : `newer-${index - 2}`,
+      status,
+    })),
+    3,
+  );
+  const shapes = ["Running", "Waiting", "Done", "Failed", "Archived"].map(
+    (label) => {
+      const mark = screen.getByRole("img", { name: label });
+      const glyph = mark.querySelector("svg");
+      expect(glyph).not.toBeNull();
+      return glyph?.innerHTML;
+    },
+  );
+  expect(new Set(shapes).size).toBe(5);
+});

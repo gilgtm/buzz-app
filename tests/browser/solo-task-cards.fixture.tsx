@@ -60,6 +60,7 @@ const profiles = new Map(
     },
   ]),
 );
+const statusRoots = params.has("status-roots");
 const viewer = "a".repeat(64);
 const scope = `https://relay.test:${viewer}`;
 if (params.has("width"))
@@ -146,9 +147,12 @@ await ctx
           },
           ...workers.map((worker) => ({
             channelId: worker.id,
-            parentChannelId: parent,
+            ...(statusRoots ? {} : { parentChannelId: parent }),
             primaryAgent: worker.agent,
-            status: worker.status,
+            status:
+              statusRoots && worker.status === "running"
+                ? ("archived" as const)
+                : worker.status,
             subtitle: "Check workspace moves",
           })),
         ],

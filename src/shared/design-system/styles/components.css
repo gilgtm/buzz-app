@@ -1213,6 +1213,7 @@
   }
   /* Task navigation has a tonal selected surface; the card still owns all paint. */
   .navigation-card[data-tone="tonal"] {
+    --affordance-panel-hover: var(--affordance-subtle-hover);
     --text-row-selected: var(--text-standard);
     --text-row-selected-subtle: var(--text-metadata);
     --text-row-selected-metadata: var(--text-metadata);
