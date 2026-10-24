@@ -327,6 +327,9 @@ the same parent content across branch selection. Previews use the authorized
 `ChannelSummary.preview`, bounded and flattened by the existing
 notification `plainText` formatter; an unavailable preview adds no placeholder.
 Task cards use the shared tonal NavigationCard; ordinary chats keep their styling.
+Workspace + buttons and empty-workspace create rows open the active enhancement's
+optional task launcher. Without that action they retain New chat and its workspace
+placement. The existing launcher binding has no workspace-prefill argument.
 
 The enhanced list groups by Workspace, Status or None, and filters or sorts roots
 and sibling workers. Workers follow their root's saved workspace. A nested chat's

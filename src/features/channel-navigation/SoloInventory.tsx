@@ -207,6 +207,12 @@ export function SoloInventory({
     if (project) resetNewChatProject(scope, project);
     void navigator.open(soloDraftTarget(scope, project ? { project } : {}));
   };
+  const newWorkspaceConversation = (project?: string) => {
+    if (!current()) return;
+    const enhancement = soloNavigationFor(session);
+    if (enhancement?.snapshot()?.enhancement.create) void enhancement.create();
+    else newChat(project);
+  };
   return (
     <nav
       className={styles.sidebarContents}
@@ -426,7 +432,7 @@ export function SoloInventory({
             workingChannels.has(item.id) ||
             unreadChats.has(item.id),
         }))}
-        onNew={newChat}
+        onNew={newWorkspaceConversation}
         renderChat={(item, rename, annotation) => (
           <SoloConversationRow
             key={item.id}

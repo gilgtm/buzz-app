@@ -29,7 +29,11 @@ afterEach(async () => {
   for (const owner of owners.splice(0)) owner.dispose();
   localStorage.clear();
 });
-async function enhancedFixture(rows: readonly SoloTaskRow[], newer = 0) {
+async function enhancedFixture(
+  rows: readonly SoloTaskRow[],
+  newer = 0,
+  create = true,
+) {
   const root = new Context();
   contexts.push(root);
   root.provide("pluginStatus", {
@@ -61,7 +65,7 @@ async function enhancedFixture(rows: readonly SoloTaskRow[], newer = 0) {
       };
     },
     read: () => ({ rows }),
-    create: { label: "New task…", run },
+    ...(create ? { create: { label: "New task…", run } } : {}),
   };
   const fiber = root
     .extend({ pluginOwner: { id: "test.tasks", revision: "one" } })
@@ -149,6 +153,60 @@ it("shows one enhanced Solo inventory, keeps ordinary recovery controls, and res
     screen.getByRole("button", { name: /^Planning/ }),
   ).not.toHaveTextContent("Running");
 });
+
+it.each([true, false])(
+  "routes workspace create controls through the optional task launcher (%s) with ordinary fallback",
+  async (create) => {
+    const user = userEvent.setup();
+    const f = await enhancedFixture([parent], 0, create);
+    const preferences = {
+      status: "ready" as const,
+      data: {
+        sections: [
+          { id: "work", name: "Work", order: 0 },
+          { id: "empty", name: "Empty", order: 1 },
+        ],
+        assignments: { [id]: "work" },
+        starred: [],
+        muted: [],
+      },
+    };
+    Object.assign(f.session.soloPreferences, { snapshot: () => preferences });
+    f.update([parent]);
+    const label = create ? "New task…" : "New chat";
+    await user.click(screen.getByRole("button", { name: `${label} in Work` }));
+    const emptyControls = screen.getAllByRole("button", {
+      name: `${label} in Empty`,
+    });
+    expect(emptyControls).toHaveLength(2); // Heading plus and the empty-workspace row.
+    for (const control of emptyControls) await user.click(control);
+    if (create) {
+      expect(f.run).toHaveBeenCalledTimes(3);
+      expect(f.run).toHaveBeenLastCalledWith({
+        scope,
+        viewer: f.session.viewer,
+      });
+      expect(f.open).not.toHaveBeenCalled();
+    } else {
+      expect(f.run).not.toHaveBeenCalled();
+      expect(f.open).toHaveBeenNthCalledWith(
+        1,
+        soloDraftTarget(scope, { project: "work" }),
+      );
+      expect(f.open).toHaveBeenNthCalledWith(
+        3,
+        soloDraftTarget(scope, { project: "empty" }),
+      );
+    }
+    await f.disable();
+    f.open.mockClear();
+    await user.click(screen.getByRole("button", { name: "New chat in Work" }));
+    expect(f.open).toHaveBeenCalledExactlyOnceWith(
+      soloDraftTarget(scope, { project: "work" }),
+    );
+    expect(f.run).toHaveBeenCalledTimes(create ? 3 : 0);
+  },
+);
 
 it("keeps branch expansion during parent/worker selection, respects explicit close, and resets on outside conversations", async () => {
   const user = userEvent.setup();

@@ -230,6 +230,7 @@ export function SoloWorkspaces({
     id: string;
     name: string;
   }>();
+  const newLabel = enhanced?.enhancement.create?.label ?? "New chat";
   const groups = snapshot.data?.sections ?? [];
   const assigned = snapshot.data?.assignments ?? {};
   const ids = new Set(groups.map((group) => group.id));
@@ -893,8 +894,8 @@ export function SoloWorkspaces({
                     {onNew && workspaceMode && (
                       <IconButton
                         size="compact"
-                        aria-label={`New chat in ${project.name}`}
-                        title="New chat"
+                        aria-label={`${newLabel} in ${project.name}`}
+                        title={newLabel}
                         icon={<PlusIcon size={15} strokeWidth={2.5} />}
                         onClick={() => onNew(project.id || undefined)}
                       />
@@ -1017,9 +1018,9 @@ export function SoloWorkspaces({
                     // An empty project offers its way out instead of an empty state.
                     <NavigationItem
                       variant="row"
-                      label="New chat"
-                      aria-label={`New chat in ${project.name}`}
-                      title={`New chat in ${project.name}`}
+                      label={newLabel}
+                      aria-label={`${newLabel} in ${project.name}`}
+                      title={`${newLabel} in ${project.name}`}
                       icon={
                         <span className={styles.conversationIcon}>
                           <PlusIcon size={16} strokeWidth={2.5} />
