@@ -41,6 +41,19 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
               );
             }),
           ).toBe(true);
+          await row.hover();
+          expect(
+            await row.evaluate((element) => {
+              const label = element
+                .querySelector(".navigation-item-label")
+                .getBoundingClientRect();
+              const action = element
+                .closest("[data-solo-menu-id]")
+                .querySelector("[data-solo-row-action]")
+                .getBoundingClientRect();
+              return label.right <= action.left;
+            }),
+          ).toBe(true);
           await row.click({ trial: true });
         }
         await workers.click({ trial: true });

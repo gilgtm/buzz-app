@@ -513,3 +513,49 @@ it("restores meaningful row focus when the workspace trigger becomes a follows n
   expect(screen.getByText("Workspace follows Planning")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /^Planning/ })).toHaveFocus();
 });
+
+it.each(["regroup", "filter"] as const)(
+  "restores focus from an open row popup after metadata %s",
+  async (change) => {
+    const user = userEvent.setup();
+    const f = await enhancedFixture([parent, child]);
+    if (change === "filter") {
+      await act(async () => {
+        await f.navigator.open(conversationTarget(scope, id));
+      });
+      await user.click(screen.getByRole("button", { name: /1 Worker/ }));
+      act(() =>
+        f.service?.setOptions({
+          group: "workspace",
+          sort: "recent",
+          show: "active-tasks",
+        }),
+      );
+    } else {
+      act(() =>
+        f.service?.setOptions({
+          group: "status",
+          sort: "recent",
+          show: "all-chats",
+        }),
+      );
+    }
+    await user.click(
+      screen.getByRole("button", {
+        name:
+          change === "filter" ? "Actions for Other" : "Actions for Planning",
+      }),
+    );
+    const copy = await screen.findByRole("menuitem", { name: /^Copy$/ });
+    copy.focus();
+    if (change === "regroup") {
+      await user.keyboard("{ArrowRight}");
+      (await screen.findByRole("menuitem", { name: "Copy chat name" })).focus();
+      f.update([{ ...parent, status: "done" }, child]);
+    } else {
+      f.update([parent, { ...child, status: "archived" }]);
+    }
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Planning/ })).toHaveFocus();
+  },
+);

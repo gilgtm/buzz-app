@@ -202,17 +202,7 @@ export function SoloWorkspaces({
       ...(enhanced ? soloAncestors(enhanced.forest, rowFocus) : []),
       `project-${project}`,
     ];
-    const control = candidates
-      .map((id) =>
-        document.querySelector<HTMLElement>(
-          `[data-solo-menu-id="${CSS.escape(id)}"] button`,
-        ),
-      )
-      .find((element) => element && !element.closest("[hidden]"));
-    (
-      control ??
-      document.querySelector<HTMLElement>("[data-solo-collection-control]")
-    )?.focus({ preventScroll: true });
+    soloFocusTarget(candidates)?.focus({ preventScroll: true });
     setRowFocus(undefined);
   });
   // Show more and Show less each unmount once spent; focus stays on the row,
@@ -545,7 +535,8 @@ export function SoloWorkspaces({
     if (overflow) hold(overflow.split(" "));
   }, [overflow, hold]);
   const previousFocus = useRef<
-    { element: HTMLElement; id: string } | undefined
+    | { element: HTMLElement; id: string; ancestors: readonly string[] }
+    | undefined
   >(undefined);
   useLayoutEffect(() => {
     const previous = previousFocus.current;
@@ -555,21 +546,11 @@ export function SoloWorkspaces({
       (document.activeElement === document.body ||
         document.activeElement === previous.element)
     ) {
-      const candidates = [
+      soloFocusTarget([
         previous.id,
         ...(enhanced ? soloAncestors(enhanced.forest, previous.id) : []),
-      ];
-      const row = candidates
-        .map((id) =>
-          document.querySelector<HTMLElement>(
-            `[data-solo-menu-id="${CSS.escape(id)}"] button`,
-          ),
-        )
-        .find((element) => element && !element.closest("[hidden]"));
-      (
-        row ??
-        document.querySelector<HTMLElement>("[data-solo-collection-control]")
-      )?.focus({ preventScroll: true });
+        ...previous.ancestors,
+      ])?.focus({ preventScroll: true });
     }
   });
   const moves =
@@ -636,6 +617,7 @@ export function SoloWorkspaces({
         className={styles.organizedRow}
         card={enhanced?.forest.tasks.has(item.id)}
         visible={isVisible}
+        focusPath={enhanced ? soloAncestors(enhanced.forest, item.id) : []}
         trailing={
           cardExpanded &&
           (enhanced?.forest.children.get(item.id)?.length ?? 0) > 0 && (
@@ -686,6 +668,7 @@ export function SoloWorkspaces({
             <SoloChatMenuItems
               session={session}
               channel={channel}
+              menuOwner={item.id}
               onShare={() => setSharing({ id: item.id, visit })}
               onConvert={() => setConverting({ id: item.id, visit })}
               onMove={(projectId) => move(item.id, projectId)}
@@ -799,8 +782,16 @@ export function SoloWorkspaces({
         onFocusCapture={(event) => {
           const element = event.target;
           const branch = element.closest<HTMLElement>("[data-solo-branch-id]");
-          previousFocus.current = branch?.dataset.soloBranchId
-            ? { element, id: branch.dataset.soloBranchId }
+          const id =
+            branch?.dataset.soloBranchId ??
+            element.closest<HTMLElement>("[data-solo-menu-owner]")?.dataset
+              .soloMenuOwner;
+          previousFocus.current = id
+            ? {
+                element,
+                id,
+                ancestors: enhanced ? soloAncestors(enhanced.forest, id) : [],
+              }
             : undefined;
         }}
         onBlurCapture={(event) => {
@@ -1117,6 +1108,20 @@ export function SoloWorkspaces({
 const DROP = "project:";
 const noSubscription = () => () => {};
 
+/** Resolve after layout, including when the old row was hidden or replaced. */
+function soloFocusTarget(ids: readonly string[]) {
+  return (
+    ids
+      .map((id) =>
+        document.querySelector<HTMLElement>(
+          `[data-solo-menu-id="${CSS.escape(id)}"] button`,
+        ),
+      )
+      .find((element) => element && !element.closest("[hidden]")) ??
+    document.querySelector<HTMLElement>("[data-solo-collection-control]")
+  );
+}
+
 /** A drop reports only its destination, so it saves exactly like Move to. */
 function DropProject({
   projectKey,
@@ -1153,8 +1158,10 @@ function ChatActionsMenu({
   trailing,
   card,
   visible = true,
+  focusPath = [],
 }: {
   visible?: boolean | undefined;
+  focusPath?: readonly string[] | undefined;
   card?: boolean | undefined;
   id: string;
   title: string;
@@ -1175,9 +1182,7 @@ function ChatActionsMenu({
       setOverflowOpen(false);
     }
   }, [visible]);
-  const restoreFocus = () =>
-    document.querySelector<HTMLElement>(`[data-solo-menu-id="${id}"] button`) ??
-    false;
+  const restoreFocus = () => soloFocusTarget([id, ...focusPath]) ?? false;
   if (!enabled)
     return (
       <div className={className} data-solo-menu-id={id}>
@@ -1235,6 +1240,7 @@ function ChatActionsMenu({
           />
           <MenuPopup
             aria-label={`Actions for ${title}`}
+            data-solo-menu-owner={id}
             align="end"
             finalFocus={restoreFocus}
           >
@@ -1245,6 +1251,7 @@ function ChatActionsMenu({
       </ContextMenuTrigger>
       <MenuPopup
         aria-label={`Actions for ${title}`}
+        data-solo-menu-owner={id}
         anchor={anchor}
         finalFocus={restoreFocus}
       >

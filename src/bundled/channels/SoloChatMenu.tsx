@@ -58,9 +58,11 @@ export function SoloChatMenuItems({
   onLifecycle,
   onReadResult,
   onMoveBlocked,
+  menuOwner,
 }: {
   session: RelaySession;
   channel: ChannelSummary;
+  menuOwner?: string | undefined;
   onShare(): void;
   onConvert(): void;
   onMove(projectId?: string): void;
@@ -143,7 +145,10 @@ export function SoloChatMenuItems({
             </MenuIcon>
             Move to
           </MenuSubmenuTrigger>
-          <MenuSubmenuPopup aria-label="Workspace">
+          <MenuSubmenuPopup
+            data-solo-menu-owner={menuOwner}
+            aria-label="Workspace"
+          >
             {grouped && (
               <MenuItem onClick={() => move(() => onMove())}>Chats</MenuItem>
             )}
@@ -168,7 +173,10 @@ export function SoloChatMenuItems({
           </MenuIcon>
           Copy
         </MenuSubmenuTrigger>
-        <MenuSubmenuPopup aria-label="Copy chat">
+        <MenuSubmenuPopup
+          data-solo-menu-owner={menuOwner}
+          aria-label="Copy chat"
+        >
           <MenuItem onClick={() => onCopy(channel.name, "Chat name")}>
             Copy chat name
           </MenuItem>

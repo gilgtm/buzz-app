@@ -25,7 +25,7 @@ const list = {
   channels: [
     {
       id: parent,
-      name: "Planning",
+      name: "Planning a long task title that must stay clear of the row actions",
       channelType: "solo" as const,
       creator: viewer,
     },
