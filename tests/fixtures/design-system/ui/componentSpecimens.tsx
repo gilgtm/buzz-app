@@ -80,7 +80,10 @@ import { TypingDots } from "../../../../src/shared/design-system/ui/TypingDots";
 import { InlineChip } from "../../../../src/shared/design-system/ui/InlineChip";
 import { Button } from "../../../../src/shared/design-system/ui/Button";
 import { IconButton } from "../../../../src/shared/design-system/ui/IconButton";
-import { NavigationItem } from "../../../../src/shared/design-system/ui/NavigationItem";
+import {
+  NavigationCard,
+  NavigationItem,
+} from "../../../../src/shared/design-system/ui/NavigationItem";
 import { NavigationSection } from "../../../../src/shared/design-system/ui/NavigationSection";
 import {
   PanelHeader,
@@ -1275,6 +1278,36 @@ function NavigationItemSpecimen() {
             selected={selected === "desktop-new"}
             onClick={() => setSelected("desktop-new")}
           />
+        </div>
+      </SpecimenGroup>
+      <SpecimenGroup
+        label="Stacked sidebar destination with an independent disclosure footer"
+        code={`<NavigationCard footer={<Button variant="ghost" size="sm">Workers</Button>}>
+  <NavigationItem multiline selected label={<span>Task title<br />Running</span>} />
+</NavigationCard>`}
+      >
+        <div className="component-navigation-section-demo">
+          <SidebarNavigation>
+            <NavigationCard
+              footer={
+                <Button variant="ghost" size="sm">
+                  Workers
+                </Button>
+              }
+            >
+              <NavigationItem
+                multiline
+                selected
+                label={
+                  <span>
+                    Task title
+                    <br />
+                    <span className="text-caption text-subtle">Running</span>
+                  </span>
+                }
+              />
+            </NavigationCard>
+          </SidebarNavigation>
         </div>
       </SpecimenGroup>
       <SpecimenGroup

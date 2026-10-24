@@ -1182,11 +1182,25 @@
      a navigation destination is not an ordinary action button, and sharing the
      styling made the generic ghost hover compete with navigation's own states. */
   .navigation-card {
+    display: block;
     border-radius: var(--radius-row);
     color: var(--text-standard);
     --interaction-row-hover: transparent;
     --interaction-selected: transparent;
     --interaction-pressed: transparent;
+  }
+  .navigation-card-row {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    min-width: 0;
+  }
+  .navigation-card-row > :first-child {
+    flex: 1;
+    min-width: 0;
+  }
+  .navigation-card-footer {
+    padding: var(--space-1) var(--space-2);
   }
   .navigation-card:is(:hover, :focus-within, [data-context-menu-present]):not(
     :has([aria-current="page"])
@@ -1380,6 +1394,14 @@
   }
   .buzz-sidebar-navigation .navigation-item[data-variant="row"][data-selected] {
     --navigation-item-text: var(--text-row-selected);
+  }
+  .buzz-sidebar-navigation .navigation-item[data-multiline] {
+    height: auto;
+    align-items: flex-start;
+    padding-block: var(--space-1);
+  }
+  .navigation-item[data-multiline] .navigation-item-label {
+    white-space: normal;
   }
   .buzz-sidebar-navigation .navigation-item[data-variant="row"][data-inset] {
     padding-inline-start: calc(var(--space-2) + var(--space-6));

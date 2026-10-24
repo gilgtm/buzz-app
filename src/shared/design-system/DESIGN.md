@@ -70,7 +70,8 @@ or actions. Keep an independent row action outside the row's primary click targe
 Do not make decorative metadata look like another control.
 
 Solo task cards use `NavigationCard` around a `NavigationItem` and its independent
-Workers disclosure. The card owns one hover and selected surface; the primary
+Workers disclosure in its `footer` slot. Use `NavigationItem multiline` for stacked
+labels so sidebar rows grow with their content. The card owns one hover and selected surface; the primary
 button owns focus and `aria-current`. Workers is a sibling button inside that
 surface. Compact cards omit Workers. Only the current task shows detail fields;
 ancestor cards retain context without selected styling. The collection's Group

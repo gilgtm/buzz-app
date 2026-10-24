@@ -67,9 +67,11 @@
   flex-shrink: 0;
 }
 .organizedRow {
+  min-width: 0;
+}
+.organizedRow:not([data-navigation-card]) {
   display: flex;
   align-items: center;
-  min-width: 0;
 }
 /* The enclosing row owns the hover and selection surface, including actions. */
 .organizedRow > :first-child {
@@ -376,6 +378,7 @@
   gap: var(--space-half);
 }
 .taskLabel > span {
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
