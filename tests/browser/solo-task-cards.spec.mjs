@@ -82,6 +82,15 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
               });
             }),
         ).toBe(true);
+        if (width === 220 && textSize === 20) {
+          expect(
+            await child.evaluate((element) => {
+              const heading = element.querySelector("[data-worker]");
+              const title = heading.firstElementChild.getBoundingClientRect();
+              return title.width >= heading.getBoundingClientRect().width / 2;
+            }),
+          ).toBe(true);
+        }
         await workers.click({ trial: true });
       }
     }
