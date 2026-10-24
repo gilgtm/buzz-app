@@ -421,7 +421,7 @@
   color: var(--text-warning);
 }
 .taskStatus[data-status="done"] svg {
-  color: var(--icon-status-complete);
+  color: var(--text-success);
 }
 .taskStatus[data-status="failed"] svg {
   color: var(--text-danger);
