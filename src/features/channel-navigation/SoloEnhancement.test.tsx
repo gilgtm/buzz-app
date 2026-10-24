@@ -750,7 +750,7 @@ it.each(["regroup", "filter"] as const)(
 );
 
 it("renders saved worker identity and refreshed status summaries", async () => {
-  const f = await enhancedFixture([parent, child]);
+  const f = await enhancedFixture([parent, child], 4);
   const picture =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aT3sAAAAASUVORK5CYII=";
   const profiles = new Map(f.session.profiles.snapshot());
@@ -789,6 +789,51 @@ it("renders saved worker identity and refreshed status summaries", async () => {
   expect(
     row().querySelector('[title="No primary agent assigned"]'),
   ).toBeInTheDocument();
+  f.channelUnread(other, 1);
+  for (let index = 0; index < 4; index++) f.channelUnread(`newer-${index}`, 0);
+  f.update([
+    parent,
+    { ...child, status: "running" },
+    ...(["done", "archived", "failed", "waiting"] as const).map(
+      (status, index) => ({
+        channelId: `newer-${index}`,
+        parentChannelId: id,
+        status,
+      }),
+    ),
+  ]);
+  const summary = screen.getByRole("button", {
+    name: /^Hide 5 workers: 1 failed, 1 waiting, 1 running, 1 done, 1 archived, 1 unread$/i,
+  });
+  expect(summary).toHaveTextContent(
+    "1 failed, 1 waiting, 1 running, 1 done, 1 archived, 1 unread",
+  );
+  const workerPath =
+    "/Users/synthetic/nexus-review/very-long-checkout-directory/tasks/worker-review";
+  f.update([
+    { ...parent, details: [{ label: "Folder", value: "/tmp/parent" }] },
+    {
+      ...child,
+      details: [
+        { label: "Folder", value: workerPath },
+        { label: "Branch", value: "task/worker" },
+      ],
+    },
+  ]);
+  expect(row()).not.toHaveTextContent("Folder");
+  expect(row()).toHaveTextContent("Branch");
+  expect(row()).toHaveTextContent(workerPath);
+  expect(row()).toHaveAccessibleName(new RegExp(workerPath));
+  expect(row().querySelector("[data-worker-folder] > span")).toHaveAttribute(
+    "title",
+    workerPath,
+  );
+  expect(screen.getByRole("button", { name: /^Planning/ })).toHaveTextContent(
+    "Folder",
+  );
+  expect(screen.getByRole("button", { name: /^Planning/ })).toHaveTextContent(
+    "/tmp/parent",
+  );
 });
 
 it("distinguishes every root task status by shape without relying on color", async () => {

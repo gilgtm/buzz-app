@@ -182,6 +182,17 @@ await ctx
                       : parent,
                 }),
             primaryAgent: worker.agent,
+            ...(worker.id === child
+              ? {
+                  details: [
+                    {
+                      label: "Folder",
+                      value:
+                        "/Users/synthetic/nexus-review/very-long-checkout-directory/tasks/worker-review",
+                    },
+                  ],
+                }
+              : {}),
             status:
               statusRoots && worker.status === "running"
                 ? ("archived" as const)

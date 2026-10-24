@@ -317,10 +317,14 @@ without discarding usable task metadata. Worker rows and the bounded footer stac
 use the host's profile/Avatar owner; missing images retain its profile fallback,
 and unassigned workers show a generic mark. Membership and typing never choose
 this identity. The disclosure shows actual direct worker statuses and matching descendant unread
-counts, without a duplicate summary row. Its accessible name retains the worker
+counts, without a duplicate summary row. The disclosure stays on one ellipsized
+line, with statuses ordered failed, waiting, running, done, archived before unread.
+Its accessible name retains the full summary, worker
 count and filtered visibility. Expanded workers stay inside the parent card while
 only the current task receives selected paint. Workers align without cumulative
-hierarchy insets. Unselected workers show one line with avatar, title and status
+hierarchy insets. Worker Folder details omit the label and truncate the beginning
+of the path, retaining the directory suffix and full value in accessible text and
+a tooltip. Unselected workers show one line with avatar, title and status
 glyph; selected workers may show supporting content. Root previews stay stable;
 detail fields show only for the active root branch or selected worker, retaining
 the same parent content across branch selection. Previews use the authorized

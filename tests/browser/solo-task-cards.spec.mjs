@@ -108,13 +108,35 @@ test("contained task cards preserve row ownership, previews and separate disclos
           await page
             .locator("[data-workers-control] > span")
             .evaluate((summary) => {
-              const card = summary
-                .closest("[data-navigation-card]")
-                .getBoundingClientRect();
-              return [...summary.children].every((item) => {
-                const box = item.getBoundingClientRect();
-                return box.left >= card.left && box.right <= card.right;
-              });
+              const control = summary.parentElement;
+              const heading = control.parentElement;
+              const text = summary.querySelector("span");
+              const caret = summary.querySelector("svg");
+              const avatars = heading.lastElementChild;
+              const footer = control.closest(".navigation-card-footer");
+              const box = control.getBoundingClientRect();
+              const textBox = text.getBoundingClientRect();
+              const caretBox = caret.getBoundingClientRect();
+              const avatarBox = avatars.getBoundingClientRect();
+              const headingBox = heading.getBoundingClientRect();
+              const style = getComputedStyle(text);
+              const footerStyle = getComputedStyle(footer);
+              return (
+                style.whiteSpace === "nowrap" &&
+                style.textOverflow === "ellipsis" &&
+                style.overflow === "hidden" &&
+                textBox.height <= parseFloat(style.lineHeight) &&
+                caretBox.width > 0 &&
+                caretBox.left >= box.left &&
+                caretBox.right <= textBox.left &&
+                textBox.right <= box.right &&
+                avatarBox.right <= headingBox.right &&
+                headingBox.height === Math.max(box.height, avatarBox.height) &&
+                footer.getBoundingClientRect().height ===
+                  headingBox.height +
+                    parseFloat(footerStyle.paddingTop) +
+                    parseFloat(footerStyle.paddingBottom)
+              );
             }),
         ).toBe(true);
         if (width === 220 && textSize === 20) {
@@ -126,6 +148,49 @@ test("contained task cards preserve row ownership, previews and separate disclos
             }),
           ).toBe(true);
         }
+        const folder = child.getByTitle(
+          "/Users/synthetic/nexus-review/very-long-checkout-directory/tasks/worker-review",
+          { exact: true },
+        );
+        await expect(child).not.toContainText("Folder");
+        const pathBounds = await folder.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const text = element.querySelector("bdi").firstChild;
+          const suffix = document.createRange();
+          suffix.setStart(text, text.length - 6);
+          suffix.setEnd(text, text.length);
+          const suffixBox = suffix.getBoundingClientRect();
+          // WebKit collapses a Range over elided characters to the ellipsis.
+          // The full inline box still proves the path starts outside the clip.
+          const fullTextBox = element
+            .querySelector("bdi")
+            .getBoundingClientRect();
+          // Range advance bounds include trailing spacing and may round outward.
+          // Check the final glyph's actual ink so the directory end stays readable.
+          const last = document.createRange();
+          last.setStart(text, text.length - 1);
+          last.setEnd(text, text.length);
+          const canvas = document.createElement("canvas").getContext("2d");
+          canvas.font = getComputedStyle(element).font;
+          const ink = canvas.measureText(text.textContent.slice(-1));
+          return {
+            inkRight:
+              last.getBoundingClientRect().left + ink.actualBoundingBoxRight,
+            scrollWidth: element.scrollWidth,
+            clientWidth: element.clientWidth,
+            clipLeft: box.left,
+            clipRight: box.right,
+            start: fullTextBox.left,
+            suffixLeft: suffixBox.left,
+          };
+        });
+        expect(pathBounds.scrollWidth).toBeGreaterThan(pathBounds.clientWidth);
+        expect(pathBounds.start).toBeLessThan(pathBounds.clipLeft);
+
+        expect(pathBounds.suffixLeft).toBeGreaterThanOrEqual(
+          pathBounds.clipLeft,
+        );
+        expect(pathBounds.inkRight).toBeLessThanOrEqual(pathBounds.clipRight);
         await workers.click({ trial: true });
       }
     }

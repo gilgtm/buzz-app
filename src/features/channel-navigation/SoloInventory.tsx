@@ -649,16 +649,32 @@ function SoloConversationRow({
               )}
               {task &&
                 showDetails &&
-                task.details?.map((detail) => (
-                  <span key={detail.label} className={styles.taskDetail}>
-                    <span className="text-caption text-metadata">
-                      {detail.label}
+                task.details?.map((detail) => {
+                  const workerFolder = nested && detail.label === "Folder";
+                  return (
+                    <span
+                      key={detail.label}
+                      className={styles.taskDetail}
+                      data-worker-folder={workerFolder || undefined}
+                    >
+                      {!workerFolder && (
+                        <span className="text-caption text-metadata">
+                          {detail.label}
+                        </span>
+                      )}
+                      <span
+                        className="font-mono text-mono text-subtle"
+                        title={workerFolder ? detail.value : undefined}
+                      >
+                        {workerFolder ? (
+                          <bdi dir="ltr">{detail.value}</bdi>
+                        ) : (
+                          detail.value
+                        )}
+                      </span>
                     </span>
-                    <span className="font-mono text-mono text-subtle">
-                      {detail.value}
-                    </span>
-                  </span>
-                ))}
+                  );
+                })}
             </span>
           }
           trailing={

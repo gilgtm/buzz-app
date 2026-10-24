@@ -73,6 +73,13 @@ export type ChatListItem = Readonly<{
 /** Each workspace lists its most recent chats; Show more adds a step. */
 export const SOLO_CHAT_CAP = 7;
 export const SOLO_CHAT_STEP = 10;
+const WORKER_SUMMARY_STATUSES = [
+  "failed",
+  "waiting",
+  "running",
+  "done",
+  "archived",
+] as const;
 
 /** The existing relay preference service owns delivery, rollback and retry. */
 export function SoloWorkspaces({
@@ -570,14 +577,14 @@ export function SoloWorkspaces({
   ): ReactNode => {
     const children = projection?.children.get(item.id) ?? [];
     const workerIds = enhanced?.forest.children.get(item.id) ?? [];
-    const workerStatuses = Object.entries(SOLO_STATUS_LABELS).flatMap(
-      ([status, label]) => {
-        const count = workerIds.filter(
-          (id) => enhanced?.forest.tasks.get(id)?.status === status,
-        ).length;
-        return count ? [`${count} ${label.toLowerCase()}`] : [];
-      },
-    );
+    const workerStatuses = WORKER_SUMMARY_STATUSES.flatMap((status) => {
+      const count = workerIds.filter(
+        (id) => enhanced?.forest.tasks.get(id)?.status === status,
+      ).length;
+      return count
+        ? [`${count} ${SOLO_STATUS_LABELS[status].toLowerCase()}`]
+        : [];
+    });
     const cardExpanded = item.id === currentId || currentPath.includes(item.id);
     const childrenOpen = workersOpen.has(item.id);
     const containsRename = !!renaming && branchIds(item.id).includes(renaming);
@@ -699,12 +706,7 @@ export function SoloWorkspaces({
                 >
                   <CaretDownIcon size={14} aria-hidden="true" />
                   <span className={styles.workerSummary}>
-                    {workerSummary.map((status, index) => (
-                      <span key={status}>
-                        {status}
-                        {index < workerSummary.length - 1 ? ", " : ""}
-                      </span>
-                    ))}
+                    {workerSummary.join(", ")}
                   </span>
                 </Button>
                 <span className={styles.workerAvatars}>

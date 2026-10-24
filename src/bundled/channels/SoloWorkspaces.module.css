@@ -439,24 +439,33 @@
   height: var(--space-5);
 }
 
-.taskDetail > :first-child {
+.taskDetail > :first-child:not(:only-child) {
   flex-shrink: 0;
 }
-.taskDetail > :nth-child(2) {
+.taskDetail > :nth-child(2),
+.taskDetail[data-worker-folder] > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Isolate the LTR path while clipping its beginning instead of its directory suffix. */
+.taskDetail[data-worker-folder] > span {
+  width: 100%;
+  direction: rtl;
+  text-align: left;
+}
+
 .workerHeading {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-1) var(--space-2);
 }
 .workerAvatars {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   padding-inline-start: var(--space-1);
 }
@@ -470,12 +479,9 @@
 }
 .workerSummary {
   min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-half) var(--space-2);
-  white-space: normal;
-}
-.workerSummary > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
