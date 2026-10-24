@@ -103,7 +103,7 @@
   width: auto;
   padding-inline-end: var(--session-row-inset);
 }
-.sidebarContents .organizedRow > div > [data-variant="row"] {
+.sidebarContents .organizedRow [data-solo-channel-id] {
   /* Status paints in the row-owned action slot outside the select button.
      Only the label clips text; clipping the button would hide that status. */
   overflow: visible;
@@ -325,8 +325,7 @@
   }
   .sidebarContents
     .organizedRow:has([data-channel-activity], [data-solo-shared])
-    > div
-    > [data-variant="row"] {
+    [data-solo-channel-id] {
     padding-inline-end: calc(
       var(--session-action-size) +
       var(--session-trailing-offset)
@@ -338,8 +337,7 @@
      Hover ties this rule's specificity, so it must stay after it. */
   .sidebarContents
     .organizedRow
-    > div
-    > [data-variant="row"]:has([data-solo-working-indicator]:not(:empty)) {
+    [data-solo-channel-id]:has([data-solo-working-indicator]:not(:empty)) {
     padding-inline-end: var(--session-row-inset);
   }
   .sidebarContents
@@ -349,8 +347,7 @@
       :has(:focus-visible),
       :has([aria-expanded="true"][aria-haspopup="menu"])
     )
-    > div
-    > [data-variant="row"] {
+    [data-solo-channel-id] {
     padding-inline-end: calc(
       var(--session-action-size) +
       var(--session-trailing-offset)
