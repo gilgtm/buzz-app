@@ -578,7 +578,7 @@ export function SoloWorkspaces({
       },
     );
     const cardExpanded = item.id === currentId || currentPath.includes(item.id);
-    const childrenOpen = cardExpanded && workersOpen.has(item.id);
+    const childrenOpen = workersOpen.has(item.id);
     const containsRename = !!renaming && branchIds(item.id).includes(renaming);
     const hidden = branchIds(item.id)
       .slice(1)
@@ -586,11 +586,7 @@ export function SoloWorkspaces({
         for (const parent of enhanced
           ? soloAncestors(enhanced.forest, id)
           : []) {
-          if (
-            !workersOpen.has(parent) ||
-            (parent !== currentId && !currentPath.includes(parent))
-          )
-            return true;
+          if (!workersOpen.has(parent)) return true;
           if (parent === item.id) return false;
         }
         return false;
@@ -660,7 +656,7 @@ export function SoloWorkspaces({
           )
         }
         trailing={
-          cardExpanded &&
+          (cardExpanded || childrenOpen) &&
           (enhanced?.forest.children.get(item.id)?.length ?? 0) > 0 && (
             <div className={styles.workerFooter}>
               <div className={styles.workerHeading}>
@@ -671,17 +667,25 @@ export function SoloWorkspaces({
                   aria-label={`${childrenOpen ? "Hide" : "Show"} ${workerIds.length} ${(workerIds.length === 1 ? enhanced?.enhancement.childNoun.one : enhanced?.enhancement.childNoun.other)?.toLowerCase()}: ${workerSummary.join(", ")}${children.length !== workerIds.length ? ` (${children.length} of ${workerIds.length} shown)` : ""}`}
                   aria-expanded={childrenOpen}
                   aria-controls={`solo-workers-${item.id}`}
-                  onClick={() => {
+                  onClick={(event) => {
                     if (childrenOpen) {
                       const panel = document.getElementById(
                         `solo-workers-${item.id}`,
                       );
-                      if (panel?.contains(document.activeElement))
-                        document
-                          .querySelector<HTMLElement>(
-                            `[data-workers-control="${CSS.escape(item.id)}"]`,
-                          )
-                          ?.focus({ preventScroll: true });
+                      if (
+                        panel?.contains(document.activeElement) ||
+                        (!cardExpanded &&
+                          event.currentTarget.contains(document.activeElement))
+                      )
+                        (cardExpanded
+                          ? event.currentTarget
+                          : soloFocusTarget([
+                              item.id,
+                              ...(enhanced
+                                ? soloAncestors(enhanced.forest, item.id)
+                                : []),
+                            ])
+                        )?.focus({ preventScroll: true });
                     }
                     setWorkersOpen((current) => {
                       const next = new Set(current);

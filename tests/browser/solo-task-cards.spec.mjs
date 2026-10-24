@@ -240,5 +240,17 @@ test("contained task cards preserve row ownership, previews and separate disclos
     }),
   );
   expect(bounds).toEqual(Array(4).fill(bounds[0]));
+  await parent.click();
+  await expect(parent).toHaveAttribute("aria-current", "page");
+  await expect(nestedRows.last()).toBeVisible();
+  const nestedClose = page.getByRole("button", {
+    name: /Hide 1 worker: 1 done/i,
+  });
+  await expect(nestedClose).toBeVisible();
+  await nestedClose.focus();
+  await nestedClose.press("Enter");
+  await expect(nestedClose).toHaveCount(0);
+  await expect(child).toBeFocused();
+  await expect(nestedRows.last()).toBeHidden();
   expect(errors).toEqual([]);
 });

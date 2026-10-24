@@ -321,8 +321,10 @@ counts, without a duplicate summary row. Its accessible name retains the worker
 count and filtered visibility. Expanded workers stay inside the parent card while
 only the current task receives selected paint. Workers align without cumulative
 hierarchy insets. Unselected workers show one line with avatar, title and status
-glyph; selected workers may show supporting content. Root previews and details stay
-the same across parent/worker selection. Previews use the authorized `ChannelSummary.preview`, bounded and flattened by the existing
+glyph; selected workers may show supporting content. Root previews stay stable;
+detail fields show only for the active root branch or selected worker, retaining
+the same parent content across branch selection. Previews use the authorized
+`ChannelSummary.preview`, bounded and flattened by the existing
 notification `plainText` formatter; an unavailable preview adds no placeholder.
 Task cards use the shared tonal NavigationCard; ordinary chats keep their styling.
 
@@ -330,8 +332,9 @@ The enhanced list groups by Workspace, Status or None, and filters or sorts root
 and sibling workers. Workers follow their root's saved workspace. A nested chat's
 own assignment remains dormant until it becomes a root or the contribution stops.
 All Move controls recheck structural placement before a write, including both New
-workspace dialogs. Root moves return the view to Workspace. Only expanded current
-and ancestor cards expose Workers; selection within a branch retains expansion,
+workspace dialogs. Root moves return the view to Workspace. Current and ancestor
+cards expose Workers; retained expanded cards keep a close disclosure. Selection
+within a branch retains expansion at every nested level,
 while a different conversation closes the old branch. Manual close does not
 navigate or mark read.
 View choices use the account/community partition and remain local when a save

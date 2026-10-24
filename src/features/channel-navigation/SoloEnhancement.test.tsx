@@ -168,6 +168,32 @@ it("keeps branch expansion during parent/worker selection, respects explicit clo
   await user.click(row);
   await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
   expect(workers).toHaveAttribute("aria-expanded", "true");
+  // Retained nested disclosures stay visible when selection returns to the root.
+  f.update([
+    parent,
+    child,
+    { channelId: "newer-0", parentChannelId: other, status: "done" },
+  ]);
+  await act(async () => {
+    await f.navigator.open(conversationTarget(scope, "newer-0"));
+  });
+  const descendant = screen.getByRole("button", { name: /^Newer 0/ });
+  expect(descendant).toHaveAttribute("aria-current", "page");
+  await user.click(row);
+  await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
+  expect(descendant).toBeVisible();
+  const nestedDisclosure = screen.getByRole("button", {
+    name: /1 worker: 1 done/i,
+  });
+  expect(nestedDisclosure).toHaveAttribute("aria-expanded", "true");
+  await user.click(nestedDisclosure);
+  expect(
+    screen.queryByRole("button", { name: /^Newer 0/ }),
+  ).not.toBeInTheDocument();
+  expect(nestedDisclosure).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Other/ })).toHaveFocus();
+  expect(workers).toHaveAttribute("aria-expanded", "true");
+  f.update([parent, child]);
   const initiallyCurrentWorker = screen.getByRole("button", { name: /^Other/ });
   await user.click(initiallyCurrentWorker);
   await waitFor(() =>
@@ -380,6 +406,7 @@ it("retains unread workers while compact cards show bounded reactive message pre
   expect(root()).toHaveTextContent("Latest reply Ready to review.");
   expect(root()).toHaveTextContent("Build sidebar"); // Generic provider subtitles stay supported.
   expect(root()).not.toHaveTextContent("1 unread");
+  expect(root()).not.toHaveTextContent("task/sidebar");
   f.channelPreview(id, "Edited **reply**");
   expect(root()).toHaveTextContent("Edited reply");
   expect(root()).not.toHaveTextContent("Latest reply");
@@ -419,6 +446,24 @@ it("retains unread workers while compact cards show bounded reactive message pre
   expect(disclosure).not.toHaveTextContent(/worker/i);
   await user.click(disclosure);
   expect(disclosure).toHaveTextContent("1 unread");
+  f.update([
+    parent,
+    child,
+    {
+      channelId: "newer-0",
+      status: "done",
+      details: [{ label: "Repository", value: "other/repo" }],
+    },
+  ]);
+  const unrelatedRoot = screen.getByRole("button", { name: /^Newer 0/ });
+  expect(unrelatedRoot).not.toHaveTextContent("other/repo");
+  await user.click(unrelatedRoot);
+  await waitFor(() =>
+    expect(unrelatedRoot).toHaveAttribute("aria-current", "page"),
+  );
+  expect(unrelatedRoot).toHaveTextContent("other/repo");
+  expect(root()).not.toHaveTextContent("task/sidebar");
+  expect(root()).toHaveTextContent("A current reply");
 });
 
 it("keeps a 0-of-1 disclosure target in the DOM and reveals the current path on direct owner replacement", async () => {

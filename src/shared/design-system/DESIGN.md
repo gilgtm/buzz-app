@@ -79,9 +79,11 @@ selection contract. Use `NavigationItem multiline` for stacked
 labels so sidebar rows grow with their content. The card owns one hover and selected surface; the primary
 button owns focus and `aria-current`. The disclosure is a sibling button inside that
 surface, with state counts and unread text. Its accessible name retains the worker
-noun, count and filtered visibility. Compact cards omit the disclosure and can show
-a bounded preview from the authorized channel summary. Root content and detail
-fields stay stable across parent/worker selection. Unselected workers use one line
+noun, count and filtered visibility. Retained expanded cards keep a close
+disclosure when selection moves within the branch. Root previews use the bounded
+authorized channel summary and stay stable; detail fields show for the active
+root branch or selected worker, without changing parent content during branch
+selection. Unselected workers use one line
 with avatar, title and a status glyph; selected workers may show supporting content. The collection's Group
 and sort Menu sits beside + in the compact list's `InlineHeader` action slot.
 It controls this list, remains reachable when empty, and uses Menu radio items.

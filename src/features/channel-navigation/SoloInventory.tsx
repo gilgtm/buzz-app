@@ -440,6 +440,10 @@ export function SoloInventory({
             title={item.title}
             task={enhanced?.forest.tasks.get(item.id)}
             nested={enhanced?.forest.parents.has(item.id)}
+            showDetails={
+              selected === item.id ||
+              enhanced?.forest.roots.get(selected ?? "") === item.id
+            }
             annotation={annotation}
             selected={selected === item.id}
             working={workingChannels.has(item.id)}
@@ -476,6 +480,7 @@ function SoloConversationRow({
   working,
   task,
   nested = false,
+  showDetails = false,
   annotation,
   Icon,
   onSelect,
@@ -494,6 +499,7 @@ function SoloConversationRow({
   working: boolean;
   task?: SoloTaskRow | undefined;
   nested?: boolean | undefined;
+  showDetails?: boolean | undefined;
   annotation?: string | undefined;
   Icon?: ChatIcon["component"] | undefined;
   onSelect: () => void;
@@ -636,7 +642,7 @@ function SoloConversationRow({
                 <span className="text-caption text-subtle">{annotation}</span>
               )}
               {task &&
-                expandedContent &&
+                showDetails &&
                 task.details?.map((detail) => (
                   <span key={detail.label} className={styles.taskDetail}>
                     <span className="text-caption text-metadata">
