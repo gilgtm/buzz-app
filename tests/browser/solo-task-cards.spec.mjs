@@ -3,14 +3,14 @@ import { watchPageErrors } from "./page-errors.mjs";
 
 // DOM emulators cannot prove flex layout, content containment or pointer hit targets.
 // Actual PrimarySidebar/SoloInventory owners run with the host's globals, four workers and real assigned-profile avatars.
-test("task selection rows fit stacked labels and keep Workers on a separate hit target", async ({
+test("contained task cards preserve row ownership, previews and separate disclosure hit targets", async ({
   page,
 }) => {
   const { errors } = watchPageErrors(page);
   await page.goto("/tests/browser/solo-task-cards.html");
   const parent = page.getByRole("button", { name: /^Planning/ });
   const child = page.getByRole("button", { name: /^Review/ });
-  const workers = page.getByRole("button", { name: /4 Workers/ });
+  const workers = page.getByRole("button", { name: /4 workers:/ });
   await expect(child).toHaveAttribute("aria-current", "page");
   for (const theme of ["light", "dark"]) {
     for (const width of [220, 260, 320]) {
@@ -27,7 +27,7 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
         `${width}px`,
       );
       for (const status of ["running", "waiting", "done", "failed"]) {
-        await expect(page.locator("[data-solo-worker-summary]")).toContainText(
+        await expect(workers.locator(":scope > span")).toContainText(
           `1 ${status}`,
         );
       }
@@ -35,6 +35,19 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
         await page.evaluate((size) => {
           document.documentElement.style.fontSize = `${size}px`;
         }, textSize);
+        expect(
+          await parent.evaluate((element) => {
+            const card = element.closest("[data-navigation-card]");
+            const selected = card.querySelector('[aria-current="page"]');
+            return (
+              selected &&
+              selected !== element &&
+              getComputedStyle(card).backgroundColor !==
+                getComputedStyle(selected.closest("[data-navigation-card]"))
+                  .backgroundColor
+            );
+          }),
+        ).toBe(true);
         const box = await parent.boundingBox();
         const footer = await workers.boundingBox();
         expect(box.width).toBeGreaterThan(100);
@@ -67,11 +80,33 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
               return label.right <= action.left;
             }),
           ).toBe(true);
+          const ownAction = await row.evaluate((element) =>
+            element
+              .closest("[data-solo-menu-id]")
+              .querySelector("[data-solo-row-action]")
+              .getAttribute("aria-label"),
+          );
+          await expect(
+            page.getByRole("button", { name: ownAction, exact: true }),
+          ).toHaveCSS("opacity", "1");
+          expect(
+            await page
+              .locator("[data-solo-row-action]")
+              .evaluateAll((actions) =>
+                actions
+                  .filter(
+                    (action) =>
+                      getComputedStyle(action).opacity === "1" &&
+                      action.getClientRects().length,
+                  )
+                  .map((action) => action.getAttribute("aria-label")),
+              ),
+          ).toEqual([ownAction]);
           await row.click({ trial: true });
         }
         expect(
           await page
-            .locator("[data-solo-worker-summary]")
+            .locator("[data-workers-control] > span")
             .evaluate((summary) => {
               const card = summary
                 .closest("[data-navigation-card]")
@@ -95,6 +130,25 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
       }
     }
   }
+  await child.click({ button: "right" });
+  await expect(
+    page.getByRole("menu", { name: "Actions for Review workspace moves" }),
+  ).toBeVisible();
+  await expect(page.getByRole("menu")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(child).toBeFocused();
+  await page.mouse.move(0, 0);
+  await workers.press("Shift+F10");
+  const parentMenu = page.getByRole("menu", { name: /Actions for Planning/ });
+  await expect(parentMenu).toBeVisible();
+  // Closing tests start after the keyboard-open focus handoff has completed.
+  await expect
+    .poll(() =>
+      parentMenu.evaluate((menu) => menu.contains(document.activeElement)),
+    )
+    .toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(parent).toBeFocused();
   await workers.click();
   await expect(child).toBeHidden();
   await workers.press("Enter");
@@ -113,6 +167,38 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
       return label.top >= box.top && label.bottom <= box.bottom;
     }),
   ).toBe(true);
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await expect(parent.locator("[data-solo-message-preview]")).toBeVisible();
+  expect(
+    await parent
+      .locator("[data-solo-message-preview]")
+      .evaluate((preview) => getComputedStyle(preview).whiteSpace),
+  ).toBe("nowrap");
+  await expect(workers).toBeHidden();
+  await page.goto("/tests/browser/solo-task-cards.html?width=260&theme=light");
+  await expect(child).toHaveAttribute("aria-current", "page");
+  // Nested workers are outside their root's draggable primary surface.
+  const childBox = await child.boundingBox();
+  await page.mouse.move(childBox.x + 25, childBox.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(childBox.x + 40, childBox.y + 25, { steps: 4 });
+  await expect(page.locator("[data-channel-dragging]")).toHaveCount(0);
+  await page.mouse.up();
+  const rootBox = await parent.boundingBox();
+  await page.mouse.move(
+    rootBox.x + rootBox.width / 2,
+    rootBox.y + rootBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    rootBox.x + rootBox.width / 2 + 30,
+    rootBox.y + rootBox.height / 2 + 15,
+    { steps: 4 },
+  );
+  await expect(page.locator("[data-channel-dragging]")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(page.locator("[data-channel-dragging]")).toHaveCount(0);
   await page.goto(
     "/tests/browser/solo-task-cards.html?status-roots=1&theme=light&width=260",
   );

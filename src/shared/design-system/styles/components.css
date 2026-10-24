@@ -1199,16 +1199,36 @@
     flex: 1;
     min-width: 0;
   }
+  .navigation-card-body {
+    padding: 0 var(--space-1) var(--space-1);
+  }
+  .navigation-card-body:has(> [hidden]:only-child) {
+    display: none;
+  }
+  .navigation-card:has(> .navigation-card-body > :not([hidden])) {
+    background: var(--affordance-subtle);
+  }
   .navigation-card-footer {
     padding: var(--space-1) var(--space-2);
   }
-  .navigation-card:is(:hover, :focus-within, [data-context-menu-present]):not(
-    :has([aria-current="page"])
-  ) {
+  .navigation-card:is(
+    :has(
+      > .navigation-card-row:hover,
+      > .navigation-card-footer:hover,
+      > .navigation-card-row :focus-visible,
+      > .navigation-card-footer :focus-visible,
+      > .navigation-card-row [data-context-menu-present],
+      > .navigation-card-row [aria-expanded="true"][aria-haspopup="menu"]
+    ),
+    [data-context-menu-present]
+  ):not(:has(> .navigation-card-row [aria-current="page"])) {
     background: var(--affordance-panel-hover);
   }
-  .navigation-card:has([aria-current="page"]) {
+  .navigation-card:has(> .navigation-card-row [aria-current="page"]) {
     background: var(--surface-sidebar-selected);
+  }
+  .navigation-card:has(> .navigation-card-row [aria-current="page"])
+    > :is(.navigation-card-row, .navigation-card-footer) {
     --text-subtle: var(--text-row-selected-subtle);
   }
   /* Task navigation has a tonal selected surface; the card still owns all paint. */
@@ -1217,15 +1237,16 @@
     --text-row-selected: var(--text-standard);
     --text-row-selected-subtle: var(--text-metadata);
     --text-row-selected-metadata: var(--text-metadata);
-    --interaction-selected-text: var(--text-subtle);
+    --interaction-selected-text: var(--text-row-selected-subtle);
     --interaction-selected-metadata: var(--text-metadata);
     --interaction-row-text: var(--text-subtle);
     --interaction-row-metadata: var(--text-metadata);
     border: 1px solid transparent;
     border-radius: var(--radius-chip);
   }
-  .navigation-card[data-tone="tonal"]:has([aria-current="page"]) {
-    --text-subtle: var(--text-metadata);
+  .navigation-card[data-tone="tonal"]:has(
+    > .navigation-card-row [aria-current="page"]
+  ) {
     background: var(--affordance-selected);
     border-color: var(--border-standard);
   }
@@ -1421,7 +1442,9 @@
   .navigation-item[data-multiline] .navigation-item-label {
     white-space: normal;
   }
-  .navigation-card[data-tone="tonal"] .navigation-item[data-multiline] {
+  .navigation-card[data-tone="tonal"]
+    > .navigation-card-row
+    .navigation-item[data-multiline] {
     padding-block: var(--space-2);
   }
   .buzz-sidebar-navigation .navigation-item[data-variant="row"][data-inset] {

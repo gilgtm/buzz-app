@@ -316,7 +316,12 @@ A row may supply `primaryAgent?: string`, the saved task agent's canonical
 without discarding usable task metadata. Worker rows and the bounded footer stack
 use the host's profile/Avatar owner; missing images retain its profile fallback,
 and unassigned workers show a generic mark. Membership and typing never choose
-this identity. Footer counts summarize the actual direct worker statuses.
+this identity. The disclosure shows actual direct worker statuses and matching descendant unread
+counts, without a duplicate summary row. Its accessible name retains the worker
+count and filtered visibility. Expanded workers stay inside the parent card while
+only the current task receives selected paint. Unselected task cards use the
+authorized `ChannelSummary.preview`, bounded and flattened by the existing
+notification `plainText` formatter; an unavailable preview adds no placeholder.
 Task cards use the shared tonal NavigationCard; ordinary chats keep their styling.
 
 The enhanced list groups by Workspace, Status or None, and filters or sorts roots

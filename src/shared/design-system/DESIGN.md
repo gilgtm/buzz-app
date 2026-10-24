@@ -70,12 +70,16 @@ or actions. Keep an independent row action outside the row's primary click targe
 Do not make decorative metadata look like another control.
 
 Solo task cards use `NavigationCard` around a `NavigationItem` and its independent
-Workers disclosure in its `footer` slot. The optional `tone="tonal"` uses neutral
+worker disclosure in its `footer` slot and nested worker cards in its `body` slot.
+The card scopes selection, hover and focus paint to its own primary row and footer;
+a selected descendant has a distinct inset surface, without selecting ancestors. The optional `tone="tonal"` uses neutral
 selection, a fine border and compact corners while preserving the same focus and
 selection contract. Use `NavigationItem multiline` for stacked
 labels so sidebar rows grow with their content. The card owns one hover and selected surface; the primary
-button owns focus and `aria-current`. Workers is a sibling button inside that
-surface. Compact cards omit Workers. Only the current task shows detail fields;
+button owns focus and `aria-current`. The disclosure is a sibling button inside that
+surface, with state counts and unread text. Its accessible name retains the worker
+noun, count and filtered visibility. Compact cards omit the disclosure and can show
+a bounded preview from the authorized channel summary. Only the current task shows detail fields;
 ancestor cards retain context without selected styling. The collection's Group
 and sort Menu sits beside + in the compact list's `InlineHeader` action slot.
 It controls this list, remains reachable when empty, and uses Menu radio items.

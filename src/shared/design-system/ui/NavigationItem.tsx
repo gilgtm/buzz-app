@@ -7,9 +7,14 @@ export function NavigationCard({
   className,
   children,
   footer,
+  body,
   tone = "default",
   ...props
-}: ComponentProps<"div"> & { footer?: ReactNode; tone?: "default" | "tonal" }) {
+}: ComponentProps<"div"> & {
+  footer?: ReactNode;
+  body?: ReactNode;
+  tone?: "default" | "tonal";
+}) {
   return (
     <div
       {...props}
@@ -20,6 +25,7 @@ export function NavigationCard({
     >
       <div className="navigation-card-row">{children}</div>
       {footer && <div className="navigation-card-footer">{footer}</div>}
+      {body && <div className="navigation-card-body">{body}</div>}
     </div>
   );
 }

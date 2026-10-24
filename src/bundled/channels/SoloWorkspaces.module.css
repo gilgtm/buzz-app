@@ -68,8 +68,6 @@
 }
 .organizedRow {
   min-width: 0;
-}
-.organizedRow:not([data-navigation-card]) {
   display: flex;
   align-items: center;
 }
@@ -367,7 +365,7 @@
 }
 
 /* NavigationCard owns the task surface, including its sibling disclosure. */
-.organizedRow[data-navigation-card]::before {
+.organizedRow[data-navigation-card-row]::before {
   display: none;
 }
 .taskLabel {
@@ -389,7 +387,7 @@
   padding-inline-start: clamp(var(--space-1), 2vw, var(--space-3));
 }
 
-.organizedRow[data-navigation-card]
+.organizedRow[data-navigation-card-row]
   :is([data-solo-row-action], [data-solo-shared], [data-channel-activity]) {
   top: var(--space-4);
 }
@@ -468,11 +466,17 @@
 .workerAvatars > .taskAvatar {
   margin-inline-start: calc(-1 * var(--space-1));
 }
+.workerHeading > button {
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+}
 .workerSummary {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-half) var(--space-2);
-  margin-block-start: var(--space-1);
+  white-space: normal;
 }
 .workerSummary > span {
   white-space: nowrap;

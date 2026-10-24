@@ -73,7 +73,7 @@ export function fixture(
     durability: "saved" as const,
     sync: "pending" as const,
   }));
-  const list = {
+  let list: ReturnType<RelaySession["channels"]["list"]> = {
     status: "ready" as const,
     channels: [
       {
@@ -114,7 +114,12 @@ export function fixture(
     scope,
     viewer,
     channelCreation: { ...base.channelCreation, available: canCreate },
-    channels: { ...base.channels, list: () => list, ensureList() {} },
+    channels: {
+      ...base.channels,
+      list: () => list,
+      subscribeList: subscribe,
+      ensureList() {},
+    },
     soloPreferences: {
       ...base.soloPreferences,
       sectionCreationWritable: canCreate,
@@ -281,6 +286,17 @@ export function fixture(
     threads(next: typeof threads) {
       act(() => {
         threads = next;
+        publish();
+      });
+    },
+    channelPreview(channelId: string, preview: string | undefined) {
+      act(() => {
+        list = {
+          ...list,
+          channels: list.channels.map((channel) =>
+            channel.id === channelId ? { ...channel, preview } : channel,
+          ),
+        };
         publish();
       });
     },

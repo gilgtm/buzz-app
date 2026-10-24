@@ -1282,13 +1282,14 @@ function NavigationItemSpecimen() {
       </SpecimenGroup>
       <SpecimenGroup
         label="Stacked sidebar destination with an independent disclosure footer"
-        code={`<NavigationCard tone="tonal" footer={<Button variant="ghost" size="sm">Workers</Button>}>
-  <NavigationItem multiline selected label={<span>Task title<br />Running</span>} />
+        code={`<NavigationCard tone="tonal" body={<NavigationItem label="Worker task" selected />} footer={<Button variant="ghost" size="sm">Workers</Button>}>
+  <NavigationItem multiline label={<span>Task title<br />Running</span>} />
 </NavigationCard>`}
       >
         <div className="component-navigation-section-demo">
           <SidebarNavigation>
             <NavigationCard
+              body={<NavigationItem label="Worker task" selected />}
               tone="tonal"
               footer={
                 <Button variant="ghost" size="sm">
@@ -1298,7 +1299,6 @@ function NavigationItemSpecimen() {
             >
               <NavigationItem
                 multiline
-                selected
                 label={
                   <span>
                     Task title

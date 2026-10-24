@@ -77,11 +77,20 @@ const list = {
         ? "Modernize checkout"
         : "Planning a long task title that must stay clear of the row actions",
       channelType: "solo" as const,
+      preview:
+        "Please make the task sidebar easier to scan, while keeping every worker action available.",
+      creator: viewer,
+    },
+    {
+      id: "77777777-7777-4777-8777-777777777777",
+      name: "Notes",
+      channelType: "solo" as const,
       creator: viewer,
     },
     ...workers.map((worker) => ({
       id: worker.id,
       name: worker.name,
+      preview: "The workspace move and focus recovery checks pass.",
       channelType: "solo" as const,
       creator: viewer,
     })),
@@ -91,11 +100,28 @@ const preferences = {
   status: "ready" as const,
   data: { sections: [], assignments: {}, starred: [], muted: [] },
 };
+const unreadSnapshots = new Map(
+  list.channels.map((channel) => [
+    channel.id,
+    {
+      ...base.unread.snapshot({ kind: "channel", channelId: channel.id }),
+      observedCount: channel.id === child ? 1 : 0,
+    },
+  ]),
+);
 const session: RelaySession = {
   ...base,
   scope,
   viewer,
   media: () => workerAvatar,
+  unread: {
+    ...base.unread,
+    snapshot: (target) =>
+      target.kind === "channel"
+        ? (unreadSnapshots.get(target.channelId) ??
+          base.unread.snapshot(target))
+        : base.unread.snapshot(target),
+  },
   profiles: {
     ...base.profiles,
     snapshot: () => profiles,
@@ -104,6 +130,7 @@ const session: RelaySession = {
   channels: { ...base.channels, list: () => list, ensureList() {} },
   soloPreferences: {
     ...base.soloPreferences,
+    writable: true,
     snapshot: () => preferences,
     ensure: async () => {},
   },
@@ -142,7 +169,6 @@ await ctx
           {
             channelId: parent,
             status: "running",
-            subtitle: "Build task sidebar",
             details: [{ label: "Branch", value: "task/sidebar" }],
           },
           ...workers.map((worker) => ({
@@ -153,7 +179,6 @@ await ctx
               statusRoots && worker.status === "running"
                 ? ("archived" as const)
                 : worker.status,
-            subtitle: "Check workspace moves",
           })),
         ],
       }),

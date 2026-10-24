@@ -42,6 +42,7 @@ import {
   MenuSeparator,
   MenuNote,
 } from "../../shared/design-system/ui/Menu";
+import { plainText } from "../notifications/content";
 import { SoloTaskAvatar } from "./SoloTaskAvatar";
 import { useSoloNavigation } from "./solo-navigation-react";
 import { soloNavigationFor } from "./solo-navigation";
@@ -511,6 +512,10 @@ function SoloConversationRow({
   );
   // Describe only by a mark that renders, using the same Shared evidence.
   const shared = useSharedWithPeople(session, channel);
+  const preview =
+    task && !selected && channel?.preview
+      ? plainText(channel.preview)
+      : undefined;
   const StatusIcon = taskStatusIcons[task?.status ?? "archived"];
   return (
     <ChannelActivityPopover
@@ -611,6 +616,14 @@ function SoloConversationRow({
               {task?.subtitle && (!nested || selected) && (
                 <span className="text-caption text-subtle">
                   {task.subtitle}
+                </span>
+              )}
+              {preview && (
+                <span
+                  className="text-caption text-subtle"
+                  data-solo-message-preview=""
+                >
+                  {preview}
                 </span>
               )}
               {annotation && (

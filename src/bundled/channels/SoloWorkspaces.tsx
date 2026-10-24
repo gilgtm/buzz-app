@@ -598,6 +598,15 @@ export function SoloWorkspaces({
     const working = hidden.filter(
       (id) => projection?.matching.has(id) && activity?.working.has(id),
     ).length;
+    const workerUnread = branchIds(item.id)
+      .slice(1)
+      .filter(
+        (id) => projection?.matching.has(id) && activity?.unread.has(id),
+      ).length;
+    const workerSummary = [
+      ...workerStatuses,
+      ...(workerUnread ? [`${workerUnread} unread`] : []),
+    ];
     const hiddenActivity = [
       unread ? `${unread} unread` : "",
       working ? `${working} working` : "",
@@ -628,6 +637,27 @@ export function SoloWorkspaces({
         card={enhanced?.forest.tasks.has(item.id)}
         visible={isVisible}
         focusPath={enhanced ? soloAncestors(enhanced.forest, item.id) : []}
+        body={
+          (enhanced?.forest.children.get(item.id)?.length ?? 0) > 0 && (
+            <div
+              id={`solo-workers-${item.id}`}
+              hidden={!childrenOpen && !containsRename}
+              className={depth < 3 ? styles.workerChildren : undefined}
+            >
+              {children.map((id) => {
+                const child = byId.get(id);
+                return child
+                  ? renderItem(
+                      child,
+                      project,
+                      depth + 1,
+                      isVisible && (childrenOpen || containsRename),
+                    )
+                  : null;
+              })}
+            </div>
+          )
+        }
         trailing={
           cardExpanded &&
           (enhanced?.forest.children.get(item.id)?.length ?? 0) > 0 && (
@@ -637,6 +667,7 @@ export function SoloWorkspaces({
                   variant="plain"
                   size="inline"
                   data-workers-control={item.id}
+                  aria-label={`${childrenOpen ? "Hide" : "Show"} ${workerIds.length} ${(workerIds.length === 1 ? enhanced?.enhancement.childNoun.one : enhanced?.enhancement.childNoun.other)?.toLowerCase()}: ${workerSummary.join(", ")}${children.length !== workerIds.length ? ` (${children.length} of ${workerIds.length} shown)` : ""}`}
                   aria-expanded={childrenOpen}
                   aria-controls={`solo-workers-${item.id}`}
                   onClick={() => {
@@ -661,15 +692,14 @@ export function SoloWorkspaces({
                   }}
                 >
                   <CaretDownIcon size={14} aria-hidden="true" />
-                  {children.length !==
-                  enhanced?.forest.children.get(item.id)?.length
-                    ? `${children.length} of `
-                    : ""}
-                  {enhanced?.forest.children.get(item.id)?.length}{" "}
-                  {enhanced?.forest.children.get(item.id)?.length === 1
-                    ? enhanced?.enhancement.childNoun.one
-                    : enhanced?.enhancement.childNoun.other}
-                  {hiddenActivity ? ` · ${hiddenActivity}` : ""}
+                  <span className={styles.workerSummary}>
+                    {workerSummary.map((status, index) => (
+                      <span key={status}>
+                        {status}
+                        {index < workerSummary.length - 1 ? ", " : ""}
+                      </span>
+                    ))}
+                  </span>
                 </Button>
                 <span className={styles.workerAvatars}>
                   {workerIds.slice(0, 4).map((id) => (
@@ -686,14 +716,6 @@ export function SoloWorkspaces({
                   )}
                 </span>
               </div>
-              <span
-                className={`${styles.workerSummary} text-caption text-metadata`}
-                data-solo-worker-summary=""
-              >
-                {workerStatuses.map((status) => (
-                  <span key={status}>{status}</span>
-                ))}
-              </span>
             </div>
           )
         }
@@ -753,7 +775,9 @@ export function SoloWorkspaces({
                 : "",
               projection?.context.has(item.id) ? "Context" : "",
               currentPath.includes(item.id) ? "Contains current task" : "",
-              !cardExpanded ? hiddenActivity : "",
+              !cardExpanded && !enhanced?.forest.tasks.has(item.id)
+                ? hiddenActivity
+                : "",
             ]
               .filter(Boolean)
               .join(" · ") || undefined,
@@ -765,25 +789,6 @@ export function SoloWorkspaces({
     return (
       <div key={item.id} data-solo-branch-id={item.id}>
         {row}
-        {(enhanced?.forest.children.get(item.id)?.length ?? 0) > 0 && (
-          <div
-            id={`solo-workers-${item.id}`}
-            hidden={!childrenOpen && !containsRename}
-            className={depth < 3 ? styles.workerChildren : undefined}
-          >
-            {children.map((id) => {
-              const child = byId.get(id);
-              return child
-                ? renderItem(
-                    child,
-                    project,
-                    depth + 1,
-                    isVisible && (childrenOpen || containsRename),
-                  )
-                : null;
-            })}
-          </div>
-        )}
       </div>
     );
   };
@@ -1190,6 +1195,7 @@ function ChatActionsMenu({
   indicator,
   enabled = true,
   trailing,
+  body,
   card,
   visible = true,
   focusPath = [],
@@ -1206,6 +1212,7 @@ function ChatActionsMenu({
   enabled?: boolean;
   /** Follows the overflow action, preserving header action keyboard order. */
   trailing?: ReactNode;
+  body?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<HTMLElement>();
@@ -1224,7 +1231,7 @@ function ChatActionsMenu({
         {trailing}
       </div>
     );
-  return (
+  const row = (
     <ContextMenuRoot
       open={open}
       onOpenChange={(next) => {
@@ -1234,16 +1241,11 @@ function ChatActionsMenu({
     >
       <ContextMenuTrigger
         render={
-          card ? (
-            <NavigationCard
-              tone="tonal"
-              className={className}
-              data-solo-menu-id={id}
-              footer={trailing}
-            />
-          ) : (
-            <div className={className} data-solo-menu-id={id} />
-          )
+          <div
+            className={className}
+            data-solo-menu-id={id}
+            data-navigation-card-row={card || undefined}
+          />
         }
         onKeyDown={(event) => {
           if (
@@ -1293,5 +1295,48 @@ function ChatActionsMenu({
         {content}
       </MenuPopup>
     </ContextMenuRoot>
+  );
+  return card ? (
+    <NavigationCard
+      tone="tonal"
+      footer={trailing}
+      body={body}
+      onKeyDown={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest(".navigation-card-footer")?.parentElement ===
+            event.currentTarget &&
+          (event.key === "ContextMenu" ||
+            (event.shiftKey && event.key === "F10"))
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          setAnchor(
+            event.target.closest<HTMLElement>("[data-workers-control]") ??
+              event.currentTarget,
+          );
+          setOpen(true);
+        }
+      }}
+      onContextMenu={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest(".navigation-card-footer")?.parentElement ===
+            event.currentTarget
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          setAnchor(
+            event.target.closest<HTMLElement>("[data-workers-control]") ??
+              event.currentTarget,
+          );
+          setOpen(true);
+        }
+      }}
+    >
+      {row}
+    </NavigationCard>
+  ) : (
+    row
   );
 }

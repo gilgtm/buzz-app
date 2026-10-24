@@ -157,9 +157,9 @@ it("keeps Workers inside expanded cards, respects manual close, and reveals only
   const row = screen.getByRole("button", { name: /^Planning/ });
   expect(row).not.toHaveAttribute("aria-current");
   expect(row).toHaveTextContent("Contains current task");
-  const workers = screen.getByRole("button", { name: /1 Worker/ });
+  const workers = screen.getByRole("button", { name: /1 worker:/i });
   expect(workers.closest("[data-navigation-card]")).toContainElement(row);
-  expect(workers.closest("[data-navigation-card]")).not.toContainElement(
+  expect(workers.closest("[data-navigation-card]")).toContainElement(
     screen.getByRole("button", { name: /^Other/ }),
   );
   expect(workers.closest("button")).toBe(workers);
@@ -184,7 +184,7 @@ it("keeps Workers inside expanded cards, respects manual close, and reveals only
     await f.navigator.open(soloDraftTarget(scope));
   });
   expect(
-    screen.queryByRole("button", { name: /Worker/ }),
+    screen.queryByRole("button", { name: /workers?:/i }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: /^Other/ }),
@@ -198,10 +198,10 @@ it("keeps Workers inside expanded cards, respects manual close, and reveals only
   );
   f.update([parent, { channelId: other, status: "waiting" }]);
   expect(
-    screen.queryByRole("button", { name: /Worker/ }),
+    screen.queryByRole("button", { name: /workers?:/i }),
   ).not.toBeInTheDocument();
   f.update([parent, child]);
-  expect(screen.getByRole("button", { name: /Worker/ })).toHaveAttribute(
+  expect(screen.getByRole("button", { name: /workers?:/i })).toHaveAttribute(
     "aria-expanded",
     "true",
   );
@@ -328,34 +328,63 @@ it("closes the saved workspace chooser when metadata makes its chat nested and r
   ).toBeInTheDocument();
 });
 
-it("retains a root for an unread hidden worker and exposes activity on its compact card", async () => {
+it("retains unread workers while compact cards show bounded reactive message previews and expanded disclosure carries unread", async () => {
+  const user = userEvent.setup();
   const f = await enhancedFixture([parent, child], 10);
   f.channelUnread(id, 0);
   f.channelUnread(other, 1);
   await act(async () => {
     await f.navigator.open(soloDraftTarget(scope));
   });
-  expect(screen.getByRole("button", { name: /^Planning/ })).toHaveTextContent(
-    "1 unread",
+  const root = () => screen.getByRole("button", { name: /^Planning/ });
+  f.channelPreview(
+    id,
+    "**Latest** [reply](https://example.test/private)\nReady to review.",
   );
+  expect(root()).toHaveTextContent("Latest reply Ready to review.");
+  expect(root()).toHaveTextContent("Build sidebar"); // Generic provider subtitles stay supported.
+  expect(root()).not.toHaveTextContent("1 unread");
+  f.channelPreview(id, "Edited **reply**");
+  expect(root()).toHaveTextContent("Edited reply");
+  expect(root()).not.toHaveTextContent("Latest reply");
+  f.channelPreview(id, undefined);
   expect(
-    screen.queryByRole("button", { name: /Worker/ }),
+    root().querySelector("[data-solo-message-preview]"),
+  ).not.toBeInTheDocument();
+  f.channelPreview(id, "<!-- invisible -->");
+  expect(
+    root().querySelector("[data-solo-message-preview]"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /workers?:/i }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: /^Other/ }),
   ).not.toBeInTheDocument();
+  f.channelPreview(id, "A current reply");
+  await user.click(root());
+  expect(
+    root().querySelector("[data-solo-message-preview]"),
+  ).not.toBeInTheDocument();
+  const disclosure = screen.getByRole("button", {
+    name: /1 worker: 1 waiting, 1 unread/i,
+  });
+  expect(disclosure).toHaveTextContent("1 waiting, 1 unread");
+  expect(disclosure).not.toHaveTextContent(/worker/i);
+  await user.click(disclosure);
+  expect(disclosure).toHaveTextContent("1 unread");
 });
 
 it("keeps a 0-of-1 disclosure target in the DOM and reveals the current path on direct owner replacement", async () => {
   const user = userEvent.setup();
   const f = await enhancedFixture([parent, child]);
-  await user.click(screen.getByRole("button", { name: /1 Worker/ }));
-  expect(screen.getByRole("button", { name: /1 Worker/ })).toHaveAttribute(
+  await user.click(screen.getByRole("button", { name: /1 worker:/i }));
+  expect(screen.getByRole("button", { name: /1 worker:/i })).toHaveAttribute(
     "aria-expanded",
     "false",
   );
   await f.replace();
-  expect(screen.getByRole("button", { name: /1 Worker/ })).toHaveAttribute(
+  expect(screen.getByRole("button", { name: /1 worker:/i })).toHaveAttribute(
     "aria-expanded",
     "true",
   );
@@ -370,7 +399,7 @@ it("keeps a 0-of-1 disclosure target in the DOM and reveals the current path on 
       show: "active-tasks",
     }),
   );
-  const workers = screen.getByRole("button", { name: /0 of 1 Worker/ });
+  const workers = screen.getByRole("button", { name: /0 of 1 shown/ });
   const target = workers.getAttribute("aria-controls");
   expect(target && document.getElementById(target)).toBeInTheDocument();
   expect(workers).toHaveAttribute("aria-expanded", "false");
@@ -531,7 +560,7 @@ it.each(["regroup", "filter"] as const)(
       await act(async () => {
         await f.navigator.open(conversationTarget(scope, id));
       });
-      await user.click(screen.getByRole("button", { name: /1 Worker/ }));
+      await user.click(screen.getByRole("button", { name: /1 worker:/i }));
       act(() =>
         f.service?.setOptions({
           group: "workspace",
@@ -581,17 +610,27 @@ it("renders saved worker identity and refreshed status summaries", async () => {
     }),
   );
   f.update([parent, { ...child, primaryAgent: outsider, status: "done" }]);
-  expect(screen.getByText("1 done")).toBeInTheDocument();
-  expect(screen.queryByText("1 running")).not.toBeInTheDocument();
-  expect(screen.queryByText("1 waiting")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: /1 worker:.*1 done/i }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /1 worker:.*1 running/i }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /1 worker:.*1 waiting/i }),
+  ).not.toBeInTheDocument();
   const row = () => screen.getByRole("button", { name: /^Other/ });
   expect(row().querySelector("img")).toHaveAttribute("src", picture);
   expect(
     row().querySelector('[title="Assigned reviewer"]'),
   ).toBeInTheDocument();
   f.update([parent, { ...child, primaryAgent: agent }]);
-  expect(screen.getByText("1 waiting")).toBeInTheDocument();
-  expect(screen.queryByText("1 done")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: /1 worker:.*1 waiting/i }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /1 worker:.*1 done/i }),
+  ).not.toBeInTheDocument();
   expect(row().querySelector("img")).not.toBeInTheDocument();
   expect(row().querySelector('[title="Owned Agent"]')).toBeInTheDocument();
   f.update([parent, child]);
