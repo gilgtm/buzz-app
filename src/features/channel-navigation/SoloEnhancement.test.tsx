@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { Context } from "@deepseek-ai/cordis";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -123,13 +123,19 @@ it("shows one enhanced Solo inventory, keeps ordinary recovery controls, and res
     await screen.findByRole("menuitemradio", { name: "All tasks" }),
   );
   await user.keyboard("{Escape}");
+  // Finish the old popup's focus restoration before opening its sibling.
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Group and sort" }),
+    ).toHaveFocus(),
+  );
   expect(screen.getByRole("button", { name: /^Other/ })).toHaveTextContent(
     "Open chat — outside filter",
   );
   await user.click(
     screen.getByRole("button", { name: "New chat or workspace" }),
   );
-  await user.click(screen.getByRole("menuitem", { name: "New task…" }));
+  await user.click(await screen.findByRole("menuitem", { name: "New task…" }));
   expect(f.run).toHaveBeenCalledOnce();
   await f.disable();
   expect(screen.getByRole("tab", { name: "Solo" })).toBeInTheDocument();
