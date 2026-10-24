@@ -2,7 +2,7 @@ import { expect, test } from "./source-fixture.mjs";
 import { watchPageErrors } from "./page-errors.mjs";
 
 // DOM emulators cannot prove flex layout, content containment or pointer hit targets.
-// Actual PrimarySidebar/SoloInventory owners run with the host's globals and two records.
+// Actual PrimarySidebar/SoloInventory owners run with the host's globals, four workers and real assigned-profile avatars.
 test("task selection rows fit stacked labels and keep Workers on a separate hit target", async ({
   page,
 }) => {
@@ -10,14 +10,27 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
   await page.goto("/tests/browser/solo-task-cards.html");
   const parent = page.getByRole("button", { name: /^Planning/ });
   const child = page.getByRole("button", { name: /^Review/ });
-  const workers = page.getByRole("button", { name: /1 Worker/ });
+  const workers = page.getByRole("button", { name: /4 Workers/ });
   await expect(child).toHaveAttribute("aria-current", "page");
   for (const theme of ["light", "dark"]) {
-    await page.evaluate((theme) => {
-      document.documentElement.dataset.colorMode = theme;
-    }, theme);
-    for (const width of [640, 1440]) {
-      await page.setViewportSize({ width, height: 950 });
+    for (const width of [220, 260, 320]) {
+      await page.setViewportSize({
+        width: width === 220 ? 640 : 1440,
+        height: 950,
+      });
+      await page.goto(
+        `/tests/browser/solo-task-cards.html?width=${width}&theme=${theme}`,
+      );
+      await expect(child).toHaveAttribute("aria-current", "page");
+      await expect(page.locator(".shell-sidebar")).toHaveCSS(
+        "width",
+        `${width}px`,
+      );
+      for (const status of ["running", "waiting", "done", "failed"]) {
+        await expect(page.locator("[data-solo-worker-summary]")).toContainText(
+          `1 ${status}`,
+        );
+      }
       for (const textSize of [16, 20]) {
         await page.evaluate((size) => {
           document.documentElement.style.fontSize = `${size}px`;
@@ -56,6 +69,19 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
           ).toBe(true);
           await row.click({ trial: true });
         }
+        expect(
+          await page
+            .locator("[data-solo-worker-summary]")
+            .evaluate((summary) => {
+              const card = summary
+                .closest("[data-navigation-card]")
+                .getBoundingClientRect();
+              return [...summary.children].every((item) => {
+                const box = item.getBoundingClientRect();
+                return box.left >= card.left && box.right <= card.right;
+              });
+            }),
+        ).toBe(true);
         await workers.click({ trial: true });
       }
     }
@@ -68,7 +94,7 @@ test("task selection rows fit stacked labels and keep Workers on a separate hit 
   await expect(parent).toHaveAttribute("aria-current", "page");
   await expect(child).not.toHaveAttribute("aria-current");
   await expect(workers).toHaveAttribute("aria-expanded", "true");
-  await expect(parent).toContainText("Branch: task/sidebar");
+  await expect(parent).toContainText("task/sidebar");
   expect(
     await parent.evaluate((element) => {
       const box = element.getBoundingClientRect();

@@ -42,6 +42,7 @@ import {
   MenuSeparator,
   MenuNote,
 } from "../../shared/design-system/ui/Menu";
+import { SoloTaskAvatar } from "./SoloTaskAvatar";
 import { useSoloNavigation } from "./solo-navigation-react";
 import { soloNavigationFor } from "./solo-navigation";
 import {
@@ -86,6 +87,19 @@ export function SoloInventory({
   const list = useChannelList(session.channels);
   const enhanced = useSoloNavigation(session);
   const title = enhanced?.enhancement.title ?? "Solo";
+  const assignedAgents = [
+    ...new Set(
+      [...(enhanced?.forest.tasks.values() ?? [])].flatMap((task) =>
+        task.primaryAgent ? [task.primaryAgent] : [],
+      ),
+    ),
+  ]
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (assignedAgents)
+      void session.profiles.ensure(assignedAgents.split(",")).catch(() => {});
+  }, [session.profiles, assignedAgents]);
   const pendingClick = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -411,6 +425,7 @@ export function SoloInventory({
             )}
             title={item.title}
             task={enhanced?.forest.tasks.get(item.id)}
+            nested={enhanced?.forest.parents.has(item.id)}
             annotation={annotation}
             selected={selected === item.id}
             working={workingChannels.has(item.id)}
@@ -446,6 +461,7 @@ function SoloConversationRow({
   selected,
   working,
   task,
+  nested = false,
   annotation,
   Icon,
   onSelect,
@@ -463,6 +479,7 @@ function SoloConversationRow({
   selected: boolean;
   working: boolean;
   task?: SoloTaskRow | undefined;
+  nested?: boolean | undefined;
   annotation?: string | undefined;
   Icon?: ChatIcon["component"] | undefined;
   onSelect: () => void;
@@ -531,7 +548,11 @@ function SoloConversationRow({
           }
           onContextMenu={() => clearTimeout(pendingClick.current)}
           icon={
-            Icon ? (
+            task ? (
+              nested ? (
+                <SoloTaskAvatar session={session} agent={task.primaryAgent} />
+              ) : null
+            ) : Icon ? (
               <Icon session={session} channelId={id} fallback={chatIcon} />
             ) : (
               chatIcon
@@ -541,16 +562,41 @@ function SoloConversationRow({
             <span
               className={task || annotation ? styles.taskLabel : styles.chatRow}
             >
-              <UnreadBadge
-                session={session}
-                channelId={id}
-                label={title}
-                labelUnread="all"
-              />
-              {task && (
+              {task ? (
+                <span
+                  className={styles.taskHeading}
+                  data-worker={nested || undefined}
+                >
+                  <span className={`${styles.taskTitle} text-label-sm`}>
+                    <UnreadBadge
+                      session={session}
+                      channelId={id}
+                      label={title}
+                      labelUnread="all"
+                    />
+                  </span>
+                  <span
+                    className={`${styles.taskStatus} text-caption`}
+                    data-status={task.status}
+                    role="img"
+                    aria-label={SOLO_STATUS_LABELS[task.status]}
+                    title={SOLO_STATUS_LABELS[task.status]}
+                  >
+                    <span className={styles.taskStatusDot} aria-hidden="true" />
+                    {nested && SOLO_STATUS_LABELS[task.status]}
+                  </span>
+                </span>
+              ) : (
+                <UnreadBadge
+                  session={session}
+                  channelId={id}
+                  label={title}
+                  labelUnread="all"
+                />
+              )}
+              {task?.subtitle && (!nested || selected) && (
                 <span className="text-caption text-subtle">
-                  {task.subtitle && `${task.subtitle} · `}
-                  {SOLO_STATUS_LABELS[task.status]}
+                  {task.subtitle}
                 </span>
               )}
               {annotation && (
@@ -559,8 +605,13 @@ function SoloConversationRow({
               {task &&
                 selected &&
                 task.details?.map((detail) => (
-                  <span key={detail.label} className="text-caption text-subtle">
-                    {detail.label}: {detail.value}
+                  <span key={detail.label} className={styles.taskDetail}>
+                    <span className="text-caption text-metadata">
+                      {detail.label}
+                    </span>
+                    <span className="font-mono text-mono text-subtle">
+                      {detail.value}
+                    </span>
                   </span>
                 ))}
             </span>

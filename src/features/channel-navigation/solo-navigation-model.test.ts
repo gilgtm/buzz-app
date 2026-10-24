@@ -103,3 +103,17 @@ it("rejects remaining cycles but accepts unknown parents as roots", () => {
     { ...SOLO_VIEW_DEFAULTS, sort: "name" },
   );
 });
+
+it("copies only a canonical saved primary-agent key without rejecting usable task metadata", () => {
+  const agent = "a".repeat(64);
+  const input = { channelId: "root", status: "running", primaryAgent: agent };
+  const rows = acceptSoloRows([
+    input,
+    { channelId: "worker", status: "waiting", primaryAgent: "not-a-key" },
+    { channelId: "ordinary", status: "done", primaryAgent: 42 },
+  ]);
+  input.primaryAgent = "b".repeat(64);
+  expect(rows[0]?.primaryAgent).toBe(agent);
+  expect(rows[1]).toEqual({ channelId: "worker", status: "waiting" });
+  expect(rows[2]).toEqual({ channelId: "ordinary", status: "done" });
+});

@@ -10,6 +10,8 @@ import {
   id,
   other,
   scope,
+  outsider,
+  agent,
 } from "../../app/shell/sidebar-testing";
 import { stubAvatarBrowserApis } from "../agents/avatar-testing";
 import { SoloNavigationService } from "./solo-navigation";
@@ -114,7 +116,7 @@ it("shows one enhanced Solo inventory, keeps ordinary recovery controls, and res
     screen.getByRole("navigation", { name: "Nexus conversations" }),
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /^Planning/ })).toHaveTextContent(
-    "Build sidebar · Running",
+    "Build sidebar",
   );
   await user.click(screen.getByRole("button", { name: "Group and sort" }));
   await user.click(
@@ -167,7 +169,7 @@ it("keeps Workers inside expanded cards, respects manual close, and reveals only
   f.navigationStatus("opened");
   expect(workers).toHaveAttribute("aria-expanded", "true");
   await user.click(row);
-  expect(screen.getByText("Branch: task/sidebar")).toBeInTheDocument();
+  expect(screen.getByText("task/sidebar")).toBeInTheDocument();
   expect(workers).toHaveAttribute("aria-expanded", "false");
   await user.click(workers);
   await user.click(screen.getByRole("button", { name: /^Other/ }));
@@ -559,3 +561,35 @@ it.each(["regroup", "filter"] as const)(
     expect(screen.getByRole("button", { name: /^Planning/ })).toHaveFocus();
   },
 );
+
+it("renders saved worker identity and refreshed status summaries", async () => {
+  const f = await enhancedFixture([parent, child]);
+  const picture =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aT3sAAAAASUVORK5CYII=";
+  const profiles = new Map(f.session.profiles.snapshot());
+  profiles.set(outsider, { name: "Assigned reviewer", picture, isAgent: true });
+  act(() =>
+    Object.assign(f.session.profiles, {
+      snapshot: () => profiles,
+      ensure: async () => {},
+    }),
+  );
+  f.update([parent, { ...child, primaryAgent: outsider, status: "done" }]);
+  expect(screen.getByText("1 done")).toBeInTheDocument();
+  expect(screen.queryByText("1 running")).not.toBeInTheDocument();
+  expect(screen.queryByText("1 waiting")).not.toBeInTheDocument();
+  const row = () => screen.getByRole("button", { name: /^Other/ });
+  expect(row().querySelector("img")).toHaveAttribute("src", picture);
+  expect(
+    row().querySelector('[title="Assigned reviewer"]'),
+  ).toBeInTheDocument();
+  f.update([parent, { ...child, primaryAgent: agent }]);
+  expect(screen.getByText("1 waiting")).toBeInTheDocument();
+  expect(screen.queryByText("1 done")).not.toBeInTheDocument();
+  expect(row().querySelector("img")).not.toBeInTheDocument();
+  expect(row().querySelector('[title="Owned Agent"]')).toBeInTheDocument();
+  f.update([parent, child]);
+  expect(
+    row().querySelector('[title="No primary agent assigned"]'),
+  ).toBeInTheDocument();
+});

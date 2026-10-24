@@ -1,4 +1,5 @@
 import "../../src/shared/styles/globals.css";
+import workerAvatar from "../fixtures/design-system/assets/avatar.png";
 import { Context } from "@deepseek-ai/cordis";
 import { createRoot } from "react-dom/client";
 import { useState } from "react";
@@ -13,28 +14,76 @@ import {
 import type { RelayData } from "../../src/features/relay/service";
 import type { Navigation } from "../../src/features/navigation/controller";
 import type { OpenTarget } from "../../src/features/navigation/targets";
+import { writeView } from "../../src/shared/view-state";
 import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 
 const parent = "11111111-1111-4111-8111-111111111111";
 const child = "22222222-2222-4222-8222-222222222222";
+const params = new URLSearchParams(location.search);
+const workers = [
+  {
+    id: child,
+    name: "Review workspace moves",
+    status: "waiting" as const,
+    agent: "b".repeat(64),
+    agentName: "Review Agent",
+  },
+  {
+    id: "33333333-3333-4333-8333-333333333333",
+    name: "Implement task model",
+    status: "done" as const,
+    agent: "c".repeat(64),
+    agentName: "Build Agent",
+  },
+  {
+    id: "44444444-4444-4444-8444-444444444444",
+    name: "Verify focus recovery",
+    status: "running" as const,
+    agent: "d".repeat(64),
+    agentName: "Test Agent",
+  },
+  {
+    id: "55555555-5555-4555-8555-555555555555",
+    name: "Check relay contract",
+    status: "failed" as const,
+    agent: "e".repeat(64),
+    agentName: "Relay Agent",
+  },
+];
+const profiles = new Map(
+  workers.map((worker, index) => [
+    worker.agent,
+    {
+      name: worker.agentName,
+      ...(index === 0 ? { picture: "https://images.test/assigned.png" } : {}),
+      isAgent: true as const,
+    },
+  ]),
+);
 const viewer = "a".repeat(64);
 const scope = `https://relay.test:${viewer}`;
+if (params.has("width"))
+  writeView(scope, "channel-sidebar", { width: Number(params.get("width")) });
+if (params.has("theme"))
+  document.documentElement.dataset.colorMode = params.get("theme") ?? "dark";
 const base = createRelaySession(null).session;
 const list = {
   status: "ready" as const,
   channels: [
     {
       id: parent,
-      name: "Planning a long task title that must stay clear of the row actions",
+      name: params.has("visual")
+        ? "Modernize checkout"
+        : "Planning a long task title that must stay clear of the row actions",
       channelType: "solo" as const,
       creator: viewer,
     },
-    {
-      id: child,
-      name: "Review",
+    ...workers.map((worker) => ({
+      id: worker.id,
+      name: worker.name,
       channelType: "solo" as const,
       creator: viewer,
-    },
+    })),
   ],
 };
 const preferences = {
@@ -45,6 +94,12 @@ const session: RelaySession = {
   ...base,
   scope,
   viewer,
+  media: () => workerAvatar,
+  profiles: {
+    ...base.profiles,
+    snapshot: () => profiles,
+    ensure: async () => {},
+  },
   channels: { ...base.channels, list: () => list, ensureList() {} },
   soloPreferences: {
     ...base.soloPreferences,
@@ -89,12 +144,13 @@ await ctx
             subtitle: "Build task sidebar",
             details: [{ label: "Branch", value: "task/sidebar" }],
           },
-          {
-            channelId: child,
+          ...workers.map((worker) => ({
+            channelId: worker.id,
             parentChannelId: parent,
-            status: "waiting",
+            primaryAgent: worker.agent,
+            status: worker.status,
             subtitle: "Check workspace moves",
-          },
+          })),
         ],
       }),
     }),

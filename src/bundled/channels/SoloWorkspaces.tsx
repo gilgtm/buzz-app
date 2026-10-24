@@ -57,6 +57,7 @@ import {
 } from "../../features/channel-navigation/solo-navigation-model";
 import { prepareSoloMove } from "../../features/channel-navigation/solo-navigation";
 import type { SoloNavigationSnapshot } from "../../features/channel-navigation/solo-navigation";
+import { SoloTaskAvatar } from "../../features/channel-navigation/SoloTaskAvatar";
 import { NavigationCard } from "../../shared/design-system/ui/NavigationItem";
 import styles from "./SoloWorkspaces.module.css";
 import channelStyles from "./Channels.module.css";
@@ -564,6 +565,15 @@ export function SoloWorkspaces({
     isVisible = true,
   ): ReactNode => {
     const children = projection?.children.get(item.id) ?? [];
+    const workerIds = enhanced?.forest.children.get(item.id) ?? [];
+    const workerStatuses = Object.entries(SOLO_STATUS_LABELS).flatMap(
+      ([status, label]) => {
+        const count = workerIds.filter(
+          (id) => enhanced?.forest.tasks.get(id)?.status === status,
+        ).length;
+        return count ? [`${count} ${label.toLowerCase()}`] : [];
+      },
+    );
     const cardExpanded = item.id === currentId || currentPath.includes(item.id);
     const childrenOpen = cardExpanded && workersOpen.has(item.id);
     const containsRename = !!renaming && branchIds(item.id).includes(renaming);
@@ -622,44 +632,68 @@ export function SoloWorkspaces({
           cardExpanded &&
           (enhanced?.forest.children.get(item.id)?.length ?? 0) > 0 && (
             <div className={styles.workerFooter}>
-              <Button
-                variant="plain"
-                size="inline"
-                data-workers-control={item.id}
-                aria-expanded={childrenOpen}
-                aria-controls={`solo-workers-${item.id}`}
-                onClick={() => {
-                  if (childrenOpen) {
-                    const panel = document.getElementById(
-                      `solo-workers-${item.id}`,
-                    );
-                    if (panel?.contains(document.activeElement))
-                      document
-                        .querySelector<HTMLElement>(
-                          `[data-workers-control="${CSS.escape(item.id)}"]`,
-                        )
-                        ?.focus({ preventScroll: true });
-                  }
-                  setWorkersOpen((current) => {
-                    const next = new Set(current);
-                    if (childrenOpen)
-                      for (const id of branchIds(item.id)) next.delete(id);
-                    else next.add(item.id);
-                    return next;
-                  });
-                }}
+              <div className={styles.workerHeading}>
+                <Button
+                  variant="plain"
+                  size="inline"
+                  data-workers-control={item.id}
+                  aria-expanded={childrenOpen}
+                  aria-controls={`solo-workers-${item.id}`}
+                  onClick={() => {
+                    if (childrenOpen) {
+                      const panel = document.getElementById(
+                        `solo-workers-${item.id}`,
+                      );
+                      if (panel?.contains(document.activeElement))
+                        document
+                          .querySelector<HTMLElement>(
+                            `[data-workers-control="${CSS.escape(item.id)}"]`,
+                          )
+                          ?.focus({ preventScroll: true });
+                    }
+                    setWorkersOpen((current) => {
+                      const next = new Set(current);
+                      if (childrenOpen)
+                        for (const id of branchIds(item.id)) next.delete(id);
+                      else next.add(item.id);
+                      return next;
+                    });
+                  }}
+                >
+                  <CaretDownIcon size={14} aria-hidden="true" />
+                  {children.length !==
+                  enhanced?.forest.children.get(item.id)?.length
+                    ? `${children.length} of `
+                    : ""}
+                  {enhanced?.forest.children.get(item.id)?.length}{" "}
+                  {enhanced?.forest.children.get(item.id)?.length === 1
+                    ? enhanced?.enhancement.childNoun.one
+                    : enhanced?.enhancement.childNoun.other}
+                  {hiddenActivity ? ` · ${hiddenActivity}` : ""}
+                </Button>
+                <span className={styles.workerAvatars}>
+                  {workerIds.slice(0, 4).map((id) => (
+                    <SoloTaskAvatar
+                      key={id}
+                      session={session}
+                      agent={enhanced?.forest.tasks.get(id)?.primaryAgent}
+                    />
+                  ))}
+                  {workerIds.length > 4 && (
+                    <span className="text-caption text-metadata">
+                      +{workerIds.length - 4}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <span
+                className={`${styles.workerSummary} text-caption text-metadata`}
+                data-solo-worker-summary=""
               >
-                <CaretDownIcon size={14} aria-hidden="true" />
-                {children.length !==
-                enhanced?.forest.children.get(item.id)?.length
-                  ? `${children.length} of `
-                  : ""}
-                {enhanced?.forest.children.get(item.id)?.length}{" "}
-                {enhanced?.forest.children.get(item.id)?.length === 1
-                  ? enhanced?.enhancement.childNoun.one
-                  : enhanced?.enhancement.childNoun.other}
-                {hiddenActivity ? ` · ${hiddenActivity}` : ""}
-              </Button>
+                {workerStatuses.map((status) => (
+                  <span key={status}>{status}</span>
+                ))}
+              </span>
             </div>
           )
         }
@@ -1202,6 +1236,7 @@ function ChatActionsMenu({
         render={
           card ? (
             <NavigationCard
+              tone="tonal"
               className={className}
               data-solo-menu-id={id}
               footer={trailing}

@@ -311,6 +311,14 @@ restores ordinary Solo. `dataRevision()` is the metadata revision; contribution
 `revision` remains the plugin revision. Plugins must use optional nested injection
 so older hosts can still activate their other surfaces.
 
+A row may supply `primaryAgent?: string`, the saved task agent's canonical
+64-character lowercase hex public key. Invalid identity values are omitted
+without discarding usable task metadata. Worker rows and the bounded footer stack
+use the host's profile/Avatar owner; missing images retain its profile fallback,
+and unassigned workers show a generic mark. Membership and typing never choose
+this identity. Footer counts summarize the actual direct worker statuses.
+Task cards use the shared tonal NavigationCard; ordinary chats keep their styling.
+
 The enhanced list groups by Workspace, Status or None, and filters or sorts roots
 and sibling workers. Workers follow their root's saved workspace. A nested chat's
 own assignment remains dormant until it becomes a root or the contribution stops.

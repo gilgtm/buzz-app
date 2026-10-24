@@ -67,6 +67,10 @@ export function acceptSoloRows(value: unknown): readonly SoloTaskRow[] {
       return Object.freeze({
         channelId: row.channelId,
         status: row.status,
+        ...(typeof row.primaryAgent === "string" &&
+        /^[0-9a-f]{64}$/.test(row.primaryAgent)
+          ? { primaryAgent: row.primaryAgent }
+          : {}),
         ...(row.parentChannelId !== undefined
           ? { parentChannelId: row.parentChannelId }
           : {}),

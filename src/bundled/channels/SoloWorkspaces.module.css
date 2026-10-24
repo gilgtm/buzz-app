@@ -159,6 +159,8 @@
 .organizedRow {
   position: relative;
   isolation: isolate;
+}
+.organizedRow:not([data-navigation-card]) {
   border-radius: var(--radius-row);
 }
 .organizedRow::before {
@@ -374,7 +376,7 @@
   min-width: 0;
   gap: var(--space-half);
 }
-.taskLabel > span {
+.taskLabel > span:not(.taskHeading, .taskDetail) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -393,4 +395,98 @@
 .organizedRow[data-navigation-card]
   :is([data-solo-row-action], [data-solo-shared], [data-channel-activity]) {
   top: var(--space-4);
+}
+
+.taskHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.taskTitle {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+.taskStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  color: var(--text-metadata);
+}
+.taskStatusDot {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--text-metadata);
+}
+.taskStatus[data-status="running"] .taskStatusDot {
+  background: var(--text-categorical-purple);
+}
+.taskStatus[data-status="waiting"] .taskStatusDot {
+  background: var(--text-warning);
+}
+.taskStatus[data-status="done"] .taskStatusDot {
+  background: var(--text-success);
+}
+.taskStatus[data-status="failed"] .taskStatusDot {
+  background: var(--text-danger);
+}
+.taskDetail {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-block-start: var(--space-1);
+}
+
+.taskAvatar {
+  display: inline-flex;
+  flex: 0 0 var(--space-5);
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+.taskDetail > :first-child {
+  flex-shrink: 0;
+}
+.taskDetail > :nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workerHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+}
+.workerAvatars {
+  display: inline-flex;
+  align-items: center;
+  padding-inline-start: var(--space-1);
+}
+.workerAvatars > .taskAvatar {
+  margin-inline-start: calc(-1 * var(--space-1));
+}
+.workerSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-half) var(--space-2);
+  margin-block-start: var(--space-1);
+}
+.workerSummary > span {
+  white-space: nowrap;
+}
+
+.taskHeading[data-worker] .taskTitle {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

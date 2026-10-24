@@ -13,6 +13,8 @@ export type SoloTaskRow = Readonly<{
   channelId: string;
   parentChannelId?: string;
   status: SoloTaskStatus;
+  /** Canonical public key of the saved primary agent, when assigned. */
+  primaryAgent?: string;
   subtitle?: string;
   details?: readonly Readonly<{ label: string; value: string }>[];
 }>;

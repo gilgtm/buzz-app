@@ -7,13 +7,15 @@ export function NavigationCard({
   className,
   children,
   footer,
+  tone = "default",
   ...props
-}: ComponentProps<"div"> & { footer?: ReactNode }) {
+}: ComponentProps<"div"> & { footer?: ReactNode; tone?: "default" | "tonal" }) {
   return (
     <div
       {...props}
       data-buzz-ui=""
       data-navigation-card=""
+      data-tone={tone}
       className={`navigation-card ${className ?? ""}`}
     >
       <div className="navigation-card-row">{children}</div>
