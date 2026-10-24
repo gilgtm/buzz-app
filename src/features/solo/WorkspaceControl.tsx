@@ -44,12 +44,25 @@ export function WorkspaceControl({
   const follows = channelId ? soloMovePolicy(session, channelId) : undefined;
   const [open, setOpen] = useState(false);
   const host = useRef<HTMLSpanElement>(null);
-  const hadFocus = useRef(false);
+  const focused = useRef<HTMLElement | undefined>(undefined);
+  const focusEvents = {
+    onFocusCapture: (event: React.FocusEvent<HTMLSpanElement>) => {
+      focused.current = event.target;
+    },
+    onBlurCapture: (event: React.FocusEvent<HTMLSpanElement>) => {
+      if (
+        event.relatedTarget &&
+        !event.currentTarget.contains(event.relatedTarget)
+      )
+        focused.current = undefined;
+    },
+  };
   const rootId = follows?.root;
   useLayoutEffect(() => {
     if (
       rootId &&
-      hadFocus.current &&
+      focused.current &&
+      !focused.current.isConnected &&
       document.activeElement === document.body
     ) {
       const dialog = host.current?.closest('[role="dialog"]');
@@ -60,9 +73,6 @@ export function WorkspaceControl({
         );
       target?.focus({ preventScroll: true });
     }
-    return () => {
-      hadFocus.current = !!host.current?.contains(document.activeElement);
-    };
   }, [rootId]);
   useEffect(() => {
     if (follows) setOpen(false);
@@ -97,13 +107,13 @@ export function WorkspaceControl({
   };
   if (follows && !onChange)
     return (
-      <span ref={host} className="text-caption text-subtle">
+      <span {...focusEvents} ref={host} className="text-caption text-subtle">
         Workspace follows {follows.title}
       </span>
     );
   const name = project ? `Workspace: ${project.name}` : "Add workspace";
   return (
-    <span ref={host}>
+    <span {...focusEvents} ref={host}>
       <MenuRoot open={open} onOpenChange={setOpen}>
         <MenuTrigger
           disabled={

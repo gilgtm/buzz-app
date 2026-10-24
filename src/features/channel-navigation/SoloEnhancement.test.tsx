@@ -18,6 +18,7 @@ import { SoloHeading } from "../../bundled/channels/SoloHeading";
 import { WorkspaceControl } from "../solo/WorkspaceControl";
 import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { conversationTarget, soloDraftTarget } from "./routes";
+import { readView, writeView } from "../../shared/view-state";
 stubAvatarBrowserApis();
 const contexts: Context[] = [];
 afterEach(async () => {
@@ -367,76 +368,148 @@ it("keeps a 0-of-1 disclosure target in the DOM and reveals the current path on 
   expect(workers).toHaveAttribute("aria-expanded", "false");
 });
 
-it("keeps workers in root groups, moves only the root, and restores dormant child assignments on disable", async () => {
-  const user = userEvent.setup();
-  const f = await enhancedFixture([parent, child]);
-  let preferences = {
-    status: "ready" as const,
-    data: {
-      sections: [
-        { id: "work", name: "Work", order: 0 },
-        { id: "child-work", name: "Child work", order: 1 },
-        { id: "destination", name: "Destination", order: 2 },
-      ],
-      assignments: { [id]: "work", [other]: "child-work" },
-      starred: [],
-      muted: [],
-    },
-  };
-  const listeners = new Set<() => void>();
-  const assign = vi.fn(async (channelId: string, projectId?: string) => {
-    preferences = {
-      ...preferences,
+it.each(["none", "status"] as const)(
+  "moves a non-current root from %s into a saved collapsed workspace and restores dormant child assignments on disable",
+  async (group) => {
+    writeView(scope, "solo:collapsed-projects", ["destination"]);
+    const user = userEvent.setup();
+    const f = await enhancedFixture([parent, child]);
+    let preferences = {
+      status: "ready" as const,
       data: {
-        ...preferences.data,
-        assignments: {
-          ...preferences.data.assignments,
-          [channelId]: projectId ?? "",
-        },
+        sections: [
+          { id: "work", name: "Work", order: 0 },
+          { id: "child-work", name: "Child work", order: 1 },
+          { id: "destination", name: "Destination", order: 2 },
+        ],
+        assignments: { [id]: "work", [other]: "child-work" },
+        starred: [],
+        muted: [],
       },
     };
-    for (const listener of listeners) listener();
-  });
+    const listeners = new Set<() => void>();
+    const assign = vi.fn(async (channelId: string, projectId?: string) => {
+      preferences = {
+        ...preferences,
+        data: {
+          ...preferences.data,
+          assignments: {
+            ...preferences.data.assignments,
+            [channelId]: projectId ?? "",
+          },
+        },
+      };
+      for (const listener of listeners) listener();
+    });
+    act(() =>
+      Object.assign(f.session.soloPreferences, {
+        writable: true,
+        snapshot: () => preferences,
+        subscribe: (listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        assign,
+      }),
+    );
+    f.update([parent, child]);
+    const placement = () =>
+      screen
+        .getByRole("button", { name: /^Other/ })
+        .closest("[data-solo-project]")
+        ?.getAttribute("data-solo-project");
+    expect(placement()).toBe("work");
+    act(() =>
+      f.service?.setOptions({
+        group: "status",
+        sort: "name",
+        show: "all-chats",
+      }),
+    );
+    expect(placement()).toBe("@status:running");
+    act(() =>
+      f.service?.setOptions({ group: "none", sort: "name", show: "all-chats" }),
+    );
+    expect(placement()).toBe("@none");
+    act(() =>
+      f.service?.setOptions({ group, sort: "name", show: "all-chats" }),
+    );
+    await act(async () => {
+      await f.navigator.open(soloDraftTarget(scope));
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Planning" }),
+    );
+    const move = await screen.findByRole("menuitem", { name: "Move to" });
+    move.focus();
+    await user.keyboard("{ArrowRight}");
+    const destination = await screen.findByRole("menuitem", {
+      name: "Destination",
+    });
+    destination.focus();
+    await user.keyboard("{Enter}");
+    expect(assign).toHaveBeenCalledExactlyOnceWith(id, "destination");
+    expect(f.service?.snapshot()?.options.group).toBe("workspace");
+    expect(screen.getByRole("button", { name: /^Planning/ })).toBeVisible();
+    expect(readView(scope, "solo:collapsed-projects", [])).toEqual([]);
+    await act(async () => {
+      await f.navigator.open(conversationTarget(scope, other));
+    });
+    expect(placement()).toBe("destination");
+    await f.disable();
+    expect(placement()).toBe("child-work");
+  },
+);
+
+it("reveals a new chat draft in the collapsed Status Chats group", async () => {
+  const user = userEvent.setup();
+  const f = await enhancedFixture([parent]);
   act(() =>
-    Object.assign(f.session.soloPreferences, {
-      writable: true,
-      snapshot: () => preferences,
-      subscribe: (listener: () => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-      assign,
+    f.service?.setOptions({
+      group: "status",
+      sort: "recent",
+      show: "all-chats",
     }),
   );
-  f.update([parent, child]);
-  const placement = () =>
-    screen
-      .getByRole("button", { name: /^Other/ })
-      .closest("[data-solo-project]")
-      ?.getAttribute("data-solo-project");
-  expect(placement()).toBe("work");
-  act(() =>
-    f.service?.setOptions({ group: "status", sort: "name", show: "all-chats" }),
-  );
-  expect(placement()).toBe("@status:running");
-  act(() =>
-    f.service?.setOptions({ group: "none", sort: "name", show: "all-chats" }),
-  );
-  expect(placement()).toBe("@none");
-  await user.click(
-    screen.getByRole("button", { name: "Actions for Planning" }),
-  );
-  const move = await screen.findByRole("menuitem", { name: "Move to" });
-  move.focus();
-  await user.keyboard("{ArrowRight}");
-  const destination = await screen.findByRole("menuitem", {
-    name: "Destination",
+  await user.click(screen.getByRole("button", { name: /^Chats$/ }));
+  expect(
+    screen.queryByRole("button", { name: /^Other/ }),
+  ).not.toBeInTheDocument();
+  await act(async () => {
+    await f.navigator.open(soloDraftTarget(scope));
   });
-  destination.focus();
-  await user.keyboard("{Enter}");
-  expect(assign).toHaveBeenCalledExactlyOnceWith(id, "destination");
-  expect(f.service?.snapshot()?.options.group).toBe("workspace");
-  expect(placement()).toBe("destination");
-  await f.disable();
-  expect(placement()).toBe("child-work");
+  expect(screen.getByRole("button", { name: /^New chat$/ })).toBeVisible();
+});
+
+it("keeps row focus when a status update remounts the task in another group", async () => {
+  const f = await enhancedFixture([parent]);
+  act(() =>
+    f.service?.setOptions({
+      group: "status",
+      sort: "recent",
+      show: "all-chats",
+    }),
+  );
+  const before = screen.getByRole("button", { name: /^Planning/ });
+  before.focus();
+  f.update([{ ...parent, status: "done" }]);
+  expect(screen.getByRole("button", { name: /^Planning/ })).toHaveFocus();
+  expect(before.isConnected).toBe(false);
+  const outside = screen.getByRole("button", { name: "Inbox" });
+  outside.focus();
+  f.update([parent]);
+  expect(outside).toHaveFocus();
+});
+
+it("restores meaningful row focus when the workspace trigger becomes a follows note", async () => {
+  const f = await enhancedFixture([
+    parent,
+    { channelId: other, status: "waiting" },
+  ]);
+  render(<WorkspaceControl session={f.session} channelId={other} />);
+  const trigger = screen.getByRole("button", { name: "Add workspace" });
+  trigger.focus();
+  f.update([parent, child]);
+  expect(screen.getByText("Workspace follows Planning")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Planning/ })).toHaveFocus();
 });

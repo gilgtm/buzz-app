@@ -247,15 +247,6 @@ export function SoloWorkspaces({
       ? (draft.projectId ?? "")
       : ""
     : undefined;
-  useEffect(() => {
-    if (draftProject === undefined) return;
-    setCollapsed((current) => {
-      if (!current.includes(draftProject)) return current;
-      const next = current.filter((id) => id !== draftProject);
-      if (workspaceMode) writeView(scope, collapsedKey, next);
-      return next;
-    });
-  }, [draftProject, scope, setCollapsed, workspaceMode]);
   const retained = [
     renaming,
     creatingFor?.id,
@@ -341,6 +332,15 @@ export function SoloWorkspaces({
         ? "@none"
         : "@chats"
     : undefined;
+  useEffect(() => {
+    if (displayedDraft === undefined) return;
+    setCollapsed((current) => {
+      if (!current.includes(displayedDraft)) return current;
+      const next = current.filter((id) => id !== displayedDraft);
+      if (workspaceMode) writeView(scope, collapsedKey, next);
+      return next;
+    });
+  }, [displayedDraft, scope, setCollapsed, workspaceMode]);
   const displayedGroup = (id: string) =>
     projects.find((project) =>
       project.rows.some((root) => branchIds(root.id).includes(id)),
@@ -433,7 +433,7 @@ export function SoloWorkspaces({
     }
 
     const saving = preferences.assign(id, projectId);
-    toggle(projectId ?? "", true);
+    openWorkspace(projectId ?? "");
     hold([id]);
     setRowFocus(id);
     void saving.catch(() => {
@@ -473,6 +473,11 @@ export function SoloWorkspaces({
         },
       }),
     );
+  };
+  const openWorkspace = (id: string) => {
+    const next = workspaceCollapsed.filter((key) => key !== id);
+    setWorkspaceCollapsed(next);
+    writeView(scope, collapsedKey, next);
   };
   const toggle = (id: string, open: boolean) => {
     const next = collapsed.filter((key) => key !== id);
@@ -566,14 +571,6 @@ export function SoloWorkspaces({
         document.querySelector<HTMLElement>("[data-solo-collection-control]")
       )?.focus({ preventScroll: true });
     }
-    return () => {
-      const element = document.activeElement;
-      const branch = element?.closest<HTMLElement>("[data-solo-branch-id]");
-      previousFocus.current =
-        element instanceof HTMLElement && branch?.dataset.soloBranchId
-          ? { element, id: branch.dataset.soloBranchId }
-          : undefined;
-    };
   });
   const moves =
     snapshot.moves?.filter((move) =>
@@ -798,195 +795,214 @@ export function SoloWorkspaces({
           {readError.message}
         </p>
       )}
-      <ChannelSidebarDnd
-        writable={preferences.writable && workspaceMode}
-        onMove={(id, key) => move(id, key.slice(DROP.length) || undefined)}
-        // Solo projects keep their saved order; only chats drag.
-        onReorder={() => {}}
-        overlay={(id) => {
-          const item = chats.find((item) => item.id === id);
-          return (
-            item && (
-              <div className={channelStyles.channelDragOverlay}>
-                <span>{item.title}</span>
-              </div>
-            )
-          );
+      <div
+        onFocusCapture={(event) => {
+          const element = event.target;
+          const branch = element.closest<HTMLElement>("[data-solo-branch-id]");
+          previousFocus.current = branch?.dataset.soloBranchId
+            ? { element, id: branch.dataset.soloBranchId }
+            : undefined;
+        }}
+        onBlurCapture={(event) => {
+          // A null destination can mean React is removing the focused row.
+          if (
+            event.relatedTarget &&
+            !event.currentTarget.contains(event.relatedTarget)
+          )
+            previousFocus.current = undefined;
         }}
       >
-        {visible.map((project) => (
-          <DropProject
-            projectKey={DROP + project.id}
-            dropEnabled={workspaceMode}
-            key={project.id}
-            className={`${styles.project} ${channelStyles.channelSection}`}
-            data-project={project.id ? "" : undefined}
-            open={
-              !collapsed.includes(project.id) || renamingProject === project.id
-            }
-            onOpenChange={(open) =>
-              toggle(
-                project.id,
-                renamingProject === project.id
-                  ? collapsed.includes(project.id)
-                  : open,
-              )
-            }
-            data-animate={animate || undefined}
-          >
-            <ChatActionsMenu
-              id={`project-${project.id}`}
-              title={project.name}
-              className={`${channelStyles.sectionHeader} ${styles.projectHeader}`}
-              enabled={workspaceMode && !!project.id}
-              trailing={
-                <div className={channelStyles.sectionActions}>
-                  {onNew && workspaceMode && (
-                    <IconButton
-                      size="compact"
-                      aria-label={`New chat in ${project.name}`}
-                      title="New chat"
-                      icon={<PlusIcon size={15} strokeWidth={2.5} />}
-                      onClick={() => onNew(project.id || undefined)}
-                    />
-                  )}
+        <ChannelSidebarDnd
+          writable={preferences.writable && workspaceMode}
+          onMove={(id, key) => move(id, key.slice(DROP.length) || undefined)}
+          // Solo projects keep their saved order; only chats drag.
+          onReorder={() => {}}
+          overlay={(id) => {
+            const item = chats.find((item) => item.id === id);
+            return (
+              item && (
+                <div className={channelStyles.channelDragOverlay}>
+                  <span>{item.title}</span>
                 </div>
+              )
+            );
+          }}
+        >
+          {visible.map((project) => (
+            <DropProject
+              projectKey={DROP + project.id}
+              dropEnabled={workspaceMode}
+              key={project.id}
+              className={`${styles.project} ${channelStyles.channelSection}`}
+              data-project={project.id ? "" : undefined}
+              open={
+                !collapsed.includes(project.id) ||
+                renamingProject === project.id
               }
-              content={
-                <>
-                  <MenuItem onClick={() => setSettingsFor(project)}>
-                    Workspace settings…
-                  </MenuItem>
-                  <MenuItem
-                    tone="danger"
-                    data-delete-solo-project=""
-                    disabled={
-                      !preferences.sectionRemovalWritable ||
-                      !!deleting ||
-                      renamingProject === project.id
-                    }
-                    onClick={() => {
-                      setDeleting(project.id);
-                      setProjectError("");
-                      void preferences
-                        .removeSection(project.id)
-                        .catch((error: unknown) => {
-                          setProjectError(
-                            error instanceof Error
-                              ? error.message
-                              : "Workspace could not be deleted. Try again.",
-                          );
-                        })
-                        .finally(() => setDeleting(undefined));
-                    }}
-                  >
-                    Delete workspace
-                  </MenuItem>
-                </>
-              }
-            >
-              <Collapsible.Trigger
-                hidden={!workspaceMode && enhanced?.options.group === "none"}
-                type="button"
-                className={`${channelStyles.sidebarSectionHeading} ${styles.projectHeading}`}
-                aria-expanded={
-                  !collapsed.includes(project.id) ||
+              onOpenChange={(open) =>
+                toggle(
+                  project.id,
                   renamingProject === project.id
-                }
-                onClick={(event) => setAnimate(event.detail > 0)}
-              >
-                <span className={channelStyles.sectionTitle}>
-                  {project.name}
-                </span>
-                <span
-                  className={channelStyles.sectionChevron}
-                  aria-hidden="true"
-                >
-                  <CaretDownIcon size={15} strokeWidth={2.5} />
-                </span>
-              </Collapsible.Trigger>
-            </ChatActionsMenu>
-            <Collapsible.Panel
-              className={styles.projectPanel}
-              data-solo-project={project.id}
+                    ? collapsed.includes(project.id)
+                    : open,
+                )
+              }
+              data-animate={animate || undefined}
             >
-              {displayedDraft === project.id && draft && (
-                <ChatActionsMenu
-                  id="new-chat-draft"
-                  title="New chat"
-                  className={styles.organizedRow}
-                  content={null}
-                  enabled={false}
-                >
-                  <div>{draft.content}</div>
-                </ChatActionsMenu>
-              )}
-              {project.listed.map((item) => renderItem(item, project))}
-              {(project.hidden > 0 || project.foldable) && (
-                <div
-                  className={styles.showMore}
-                  data-solo-show-more={project.id}
-                >
-                  {project.hidden > 0 && (
-                    <NavigationItem
-                      variant="text"
-                      data-solo-show-more-expand=""
-                      label={
-                        enhanced
-                          ? `Show more · ${project.hidden} roots`
-                          : "Show more"
+              <ChatActionsMenu
+                id={`project-${project.id}`}
+                title={project.name}
+                className={`${channelStyles.sectionHeader} ${styles.projectHeader}`}
+                enabled={workspaceMode && !!project.id}
+                trailing={
+                  <div className={channelStyles.sectionActions}>
+                    {onNew && workspaceMode && (
+                      <IconButton
+                        size="compact"
+                        aria-label={`New chat in ${project.name}`}
+                        title="New chat"
+                        icon={<PlusIcon size={15} strokeWidth={2.5} />}
+                        onClick={() => onNew(project.id || undefined)}
+                      />
+                    )}
+                  </div>
+                }
+                content={
+                  <>
+                    <MenuItem onClick={() => setSettingsFor(project)}>
+                      Workspace settings…
+                    </MenuItem>
+                    <MenuItem
+                      tone="danger"
+                      data-delete-solo-project=""
+                      disabled={
+                        !preferences.sectionRemovalWritable ||
+                        !!deleting ||
+                        renamingProject === project.id
                       }
-                      aria-label={`Show more ${enhanced ? "roots" : "chats"} in ${project.name}`}
+                      onClick={() => {
+                        setDeleting(project.id);
+                        setProjectError("");
+                        void preferences
+                          .removeSection(project.id)
+                          .catch((error: unknown) => {
+                            setProjectError(
+                              error instanceof Error
+                                ? error.message
+                                : "Workspace could not be deleted. Try again.",
+                            );
+                          })
+                          .finally(() => setDeleting(undefined));
+                      }}
+                    >
+                      Delete workspace
+                    </MenuItem>
+                  </>
+                }
+              >
+                <Collapsible.Trigger
+                  hidden={!workspaceMode && enhanced?.options.group === "none"}
+                  type="button"
+                  className={`${channelStyles.sidebarSectionHeading} ${styles.projectHeading}`}
+                  aria-expanded={
+                    !collapsed.includes(project.id) ||
+                    renamingProject === project.id
+                  }
+                  onClick={(event) => setAnimate(event.detail > 0)}
+                >
+                  <span className={channelStyles.sectionTitle}>
+                    {project.name}
+                  </span>
+                  <span
+                    className={channelStyles.sectionChevron}
+                    aria-hidden="true"
+                  >
+                    <CaretDownIcon size={15} strokeWidth={2.5} />
+                  </span>
+                </Collapsible.Trigger>
+              </ChatActionsMenu>
+              <Collapsible.Panel
+                className={styles.projectPanel}
+                data-solo-project={project.id}
+              >
+                {displayedDraft === project.id && draft && (
+                  <ChatActionsMenu
+                    id="new-chat-draft"
+                    title="New chat"
+                    className={styles.organizedRow}
+                    content={null}
+                    enabled={false}
+                  >
+                    <div>{draft.content}</div>
+                  </ChatActionsMenu>
+                )}
+                {project.listed.map((item) => renderItem(item, project))}
+                {(project.hidden > 0 || project.foldable) && (
+                  <div
+                    className={styles.showMore}
+                    data-solo-show-more={project.id}
+                  >
+                    {project.hidden > 0 && (
+                      <NavigationItem
+                        variant="text"
+                        data-solo-show-more-expand=""
+                        label={
+                          enhanced
+                            ? `Show more · ${project.hidden} roots`
+                            : "Show more"
+                        }
+                        aria-label={`Show more ${enhanced ? "roots" : "chats"} in ${project.name}`}
+                        icon={
+                          <span
+                            className={styles.conversationIcon}
+                            aria-hidden="true"
+                          >
+                            <CaretDownIcon size={16} />
+                          </span>
+                        }
+                        onClick={() =>
+                          expand(project.id, project.extra + SOLO_CHAT_STEP)
+                        }
+                      />
+                    )}
+                    {project.foldable && (
+                      <NavigationItem
+                        variant="text"
+                        data-solo-show-more-fold=""
+                        label="Show less"
+                        aria-label={`Show fewer chats in ${project.name}`}
+                        onClick={() => expand(project.id, 0)}
+                      />
+                    )}
+                  </div>
+                )}
+                {!project.rows.length &&
+                  workspaceMode &&
+                  project.id &&
+                  (onNew ? (
+                    // An empty project offers its way out instead of an empty state.
+                    <NavigationItem
+                      variant="row"
+                      label="New chat"
+                      aria-label={`New chat in ${project.name}`}
+                      title={`New chat in ${project.name}`}
                       icon={
-                        <span
-                          className={styles.conversationIcon}
-                          aria-hidden="true"
-                        >
-                          <CaretDownIcon size={16} />
+                        <span className={styles.conversationIcon}>
+                          <PlusIcon size={16} strokeWidth={2.5} />
                         </span>
                       }
-                      onClick={() =>
-                        expand(project.id, project.extra + SOLO_CHAT_STEP)
-                      }
+                      onClick={() => onNew(project.id)}
                     />
-                  )}
-                  {project.foldable && (
-                    <NavigationItem
-                      variant="text"
-                      data-solo-show-more-fold=""
-                      label="Show less"
-                      aria-label={`Show fewer chats in ${project.name}`}
-                      onClick={() => expand(project.id, 0)}
-                    />
-                  )}
-                </div>
-              )}
-              {!project.rows.length &&
-                workspaceMode &&
-                project.id &&
-                (onNew ? (
-                  // An empty project offers its way out instead of an empty state.
-                  <NavigationItem
-                    variant="row"
-                    label="New chat"
-                    aria-label={`New chat in ${project.name}`}
-                    title={`New chat in ${project.name}`}
-                    icon={
-                      <span className={styles.conversationIcon}>
-                        <PlusIcon size={16} strokeWidth={2.5} />
-                      </span>
-                    }
-                    onClick={() => onNew(project.id)}
-                  />
-                ) : (
-                  <p className={styles.listMessage}>
-                    No chats in this workspace.
-                  </p>
-                ))}
-            </Collapsible.Panel>
-          </DropProject>
-        ))}
-      </ChannelSidebarDnd>
+                  ) : (
+                    <p className={styles.listMessage}>
+                      No chats in this workspace.
+                    </p>
+                  ))}
+              </Collapsible.Panel>
+            </DropProject>
+          ))}
+        </ChannelSidebarDnd>
+      </div>
       {converting && (
         <ConvertToChannel
           key={converting.id}
@@ -1088,9 +1104,7 @@ export function SoloWorkspaces({
             void preferences
               .createAndAssign(creatingFor.id, { id, name })
               .catch(() => {});
-            setWorkspaceCollapsed((current) =>
-              current.filter((key) => key !== id),
-            );
+            openWorkspace(id);
             setCreatingFor(undefined);
             return true;
           }}
@@ -1182,7 +1196,11 @@ function ChatActionsMenu({
       <ContextMenuTrigger
         render={
           card ? (
-            <NavigationCard className={className} data-solo-menu-id={id} />
+            <NavigationCard
+              className={className}
+              data-solo-menu-id={id}
+              footer={trailing}
+            />
           ) : (
             <div className={className} data-solo-menu-id={id} />
           )
@@ -1223,7 +1241,7 @@ function ChatActionsMenu({
             {content}
           </MenuPopup>
         </MenuRoot>
-        {trailing}
+        {!card && trailing}
       </ContextMenuTrigger>
       <MenuPopup
         aria-label={`Actions for ${title}`}

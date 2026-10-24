@@ -494,7 +494,7 @@ function SoloConversationRow({
       trigger={
         <NavigationItem
           type="button"
-          multiline={!!task}
+          multiline={!!task || !!annotation}
           selected={selected}
           data-solo-channel-id={id}
           aria-current={selected ? "page" : undefined}

@@ -380,12 +380,8 @@
   text-overflow: ellipsis;
 }
 
-.organizedRow[data-navigation-card] {
-  flex-wrap: wrap;
-}
 .workerFooter {
-  flex: 0 0 100%;
-  padding: var(--space-1) var(--space-2);
+  min-width: 0;
 }
 .workerChildren {
   padding-inline-start: clamp(var(--space-1), 2vw, var(--space-3));
